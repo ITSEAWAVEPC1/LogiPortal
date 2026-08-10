@@ -1,0 +1,22 @@
+/* Brand tokens — docs/platform-development-plan.md Section 2.1 */
+:root {
+  --brand-teal: #2fa8b5;
+  --brand-plum: #9b4a82;
+
+  --bg-offwhite: #f7f4ef;
+  --surface-white: #ffffff;
+  --border-subtle: #e5e1d8;
+
+  --text-primary: #2b2a26;
+  --text-secondary: #8a8578;
+  --text-tertiary: #a6a192;
+
+  --status-success-fg: #1b6b74;
+  --status-success-bg: #dceff1;
+
+  --status-warning-fg: #92400e;
+  --status-warning-bg: #fef3c7;
+
+  --status-danger-fg: #b91c1c;
+  --status-danger-bg: #fee2e2;
+}

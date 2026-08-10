@@ -1,0 +1,91 @@
+// Stage 0 — Foundation & Design System
+// Models: User, Role, Branch, Session, FieldPermission (per docs/platform-development-plan.md Section 8)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7: connection URL is no longer set here. Migrate/CLI reads it from
+// prisma.config.ts; PrismaClient reads it via the driver adapter in
+// src/lib/db/prisma.ts.
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  BRANCH_MANAGER
+  DOER
+  SALES
+  ACCOUNTS
+  CUSTOMER
+}
+
+enum FieldAccessLevel {
+  NONE
+  VIEW
+  EDIT
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+
+  @@map("branches")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  sessions Session[]
+
+  @@map("users")
+}
+
+// Login-audit record, written by our own sign-in callback. NextAuth's Credentials
+// provider only supports the "jwt" session strategy (no database sessions for
+// credentials logins), so this table does not back live auth sessions — it's an
+// append-only login log, and a head start on Stage 10's audit trail.
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@map("sessions")
+}
+
+// Encodes the Section 4.3 job-detail field-permission matrix as data.
+// (role, resource, fieldGroup) -> access. Queried at request time by
+// src/lib/permissions/field-permissions.ts.
+model FieldPermission {
+  id         String            @id @default(cuid())
+  role       Role
+  resource   String
+  fieldGroup String
+  access     FieldAccessLevel
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([role, resource, fieldGroup])
+  @@map("field_permissions")
+}
