@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Button, Input, Modal, Select } from "@/components/ui";
 
-interface OrganizationRow {
+export interface OrganizationRow {
   id: string;
   name: string;
   contactPersonName: string | null;
@@ -25,7 +25,10 @@ interface CustomerFormModalProps {
   organization?: OrganizationRow;
   branches: Branch[];
   onClose: () => void;
-  onSaved: () => void;
+  /** Receives the created/updated organization — lets callers (e.g. the
+   *  Enquiry form's customer picker) select it immediately without an
+   *  extra round trip. */
+  onSaved: (organization: OrganizationRow) => void;
 }
 
 const EMPTY_FORM = {
@@ -84,7 +87,7 @@ function CustomerForm({
   organization?: OrganizationRow;
   branches: Branch[];
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (organization: OrganizationRow) => void;
 }) {
   const [form, setForm] = useState(() => formFromOrganization(organization));
   const [error, setError] = useState<string | null>(null);
@@ -105,13 +108,14 @@ function CustomerForm({
 
     setSubmitting(false);
 
+    const body = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       setError(body.error ?? "Something went wrong.");
       return;
     }
 
-    onSaved();
+    onSaved(body.organization as OrganizationRow);
   }
 
   return (

@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Badge, Button, DataTable, Input, Select } from "@/components/ui";
 import type { Role } from "@/lib/permissions/roles";
 import { can } from "@/lib/permissions/capabilities";
-import { CustomerFormModal } from "./CustomerFormModal";
+import { CustomerFormModal } from "@/components/shared/CustomerFormModal";
 
 interface OrganizationRow {
   id: string;

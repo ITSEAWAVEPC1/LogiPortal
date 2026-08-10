@@ -38,6 +38,7 @@ model Branch {
 
   users         User[]
   organizations Organization[]
+  enquiries     Enquiry[]
 
   @@map("branches")
 }
@@ -58,6 +59,8 @@ model User {
   sessions             Session[]
   createdOrganizations Organization[] @relation("OrganizationCreatedBy")
   importBatches        ImportBatch[]
+  enquiriesAsDoer      Enquiry[]      @relation("EnquiryDoer")
+  enquiriesReviewed    Enquiry[]      @relation("EnquiryReviewedBy")
 
   @@map("users")
 }
@@ -121,6 +124,7 @@ model Organization {
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
 
   kycDetail KycDetail?
+  enquiries Enquiry[]
 
   @@index([branchId])
   @@index([name])
@@ -203,4 +207,166 @@ model ImportRowError {
 
   @@index([importBatchId])
   @@map("import_row_errors")
+}
+
+// ---------------------------------------------------------------------------
+// Stage 2 — Enquiry Capturing
+// ---------------------------------------------------------------------------
+
+enum ShipmentType {
+  IMPORT
+  EXPORT
+}
+
+enum ServiceType {
+  FREIGHT_FORWARDING
+  CUSTOMS_CLEARANCE
+  TRANSPORTATION
+  WAREHOUSING
+  EXIM_CONSULTANCY
+}
+
+enum EnquiryStatus {
+  DRAFT
+  OPEN
+  READY_FOR_QUOTATION
+  NEEDS_CORRECTION
+}
+
+enum CargoMode {
+  LCL_AIR
+  FCL
+}
+
+enum TransportDeliveryType {
+  LOADED
+  DESTUFF
+}
+
+model Enquiry {
+  id     String        @id @default(cuid())
+  status EnquiryStatus @default(DRAFT)
+
+  // Numeric part of the human-facing reference (ENQ-{year}-{sequenceNumber,
+  // padded}). Global autoincrement, not reset per year — see
+  // docs/stage-checklists/stage-2.md for the tradeoff.
+  sequenceNumber Int @default(autoincrement())
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // Snapshot, editable per-enquiry — seeded from Organization on selection
+  // but intentionally not re-synced if the org's saved contact changes later
+  // (the RFQ caller isn't always the org's registered contact).
+  contactPersonName  String?
+  contactPersonPhone String?
+  contactPersonEmail String?
+
+  shipmentType ShipmentType?
+  serviceTypes ServiceType[] @default([])
+  rfqReason    String?
+
+  // "Doer Name" (source doc's literal field label) — auto-set to the session
+  // user at creation, never client-supplied. Can be a Sales-role user per
+  // Section 5.2 ("Sales or Doer starts a new Enquiry").
+  doerId String
+  doer   User   @relation("EnquiryDoer", fields: [doerId], references: [id])
+
+  reviewedById String?
+  reviewedBy   User?     @relation("EnquiryReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  freightDetail   EnquiryFreightDetail?
+  customsDetail   EnquiryCustomsDetail?
+  transportDetail EnquiryTransportDetail?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([doerId])
+  @@map("enquiries")
+}
+
+model EnquiryFreightDetail {
+  id        String  @id @default(cuid())
+  enquiryId String  @unique
+  enquiry   Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+
+  incoterm        String?
+  portOfLoading   String?
+  portOfDischarge String?
+  cargoMode       CargoMode?
+
+  // LCL & Air
+  packageCount Int?
+  dimensions   String?
+  weight       Float?
+
+  // FCL
+  fclWeight      Float?
+  containerType  String?
+  containerCount Int?
+
+  // ODC (over-dimensional cargo) — only meaningful when cargoMode = FCL
+  isOdc               Boolean @default(false)
+  odcDimensions       String?
+  odcPackageCount     Int?
+  odcPerPackageWeight Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("enquiry_freight_details")
+}
+
+model EnquiryCustomsDetail {
+  id        String  @id @default(cuid())
+  enquiryId String  @unique
+  enquiry   Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+
+  hsCode    String?
+  commodity String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("enquiry_customs_details")
+}
+
+model EnquiryTransportDetail {
+  id        String  @id @default(cuid())
+  enquiryId String  @unique
+  enquiry   Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+
+  pickup      String?
+  destination String?
+  cargoMode   CargoMode?
+
+  // LCL & Air
+  packageCount Int?
+  dimensions   String?
+  weight       Float?
+
+  // FCL — note: no container-count field here, unlike Freight Forwarding's FCL block
+  fclWeight     Float?
+  containerType String?
+  deliveryType  TransportDeliveryType?
+
+  // ODC — only meaningful when cargoMode = FCL
+  isOdc               Boolean @default(false)
+  odcDimensions       String?
+  odcPackageCount     Int?
+  odcPerPackageWeight Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("enquiry_transport_details")
 }
