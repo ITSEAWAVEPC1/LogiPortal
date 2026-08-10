@@ -8,3 +8,4 @@ export * from "./Textarea";
 export * from "./Checkbox";
 export * from "./DataTable";
 export * from "./StepTracker";
+export * from "./FileDropzone";

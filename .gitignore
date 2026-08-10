@@ -42,3 +42,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# generated test fixtures (regenerate via tests/fixtures/generate-sample-customers.ts)
+/tests/fixtures/output

@@ -32,10 +32,12 @@ model Branch {
   id        String   @id @default(cuid())
   name      String
   code      String   @unique
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users User[]
+  users         User[]
+  organizations Organization[]
 
   @@map("branches")
 }
@@ -53,7 +55,9 @@ model User {
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id])
 
-  sessions Session[]
+  sessions             Session[]
+  createdOrganizations Organization[] @relation("OrganizationCreatedBy")
+  importBatches        ImportBatch[]
 
   @@map("users")
 }
@@ -88,4 +92,115 @@ model FieldPermission {
 
   @@unique([role, resource, fieldGroup])
   @@map("field_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Stage 1 — Master Data + Bulk Import Wizard
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id                 String   @id @default(cuid())
+  name               String
+  contactPersonName  String?
+  contactPersonPhone String?
+  contactPersonEmail String?
+  city               String?
+  state              String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("OrganizationCreatedBy", fields: [createdById], references: [id])
+
+  // Traceability: which bulk-import batch created this row, if any (null = created manually).
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  kycDetail KycDetail?
+
+  @@index([branchId])
+  @@index([name])
+  @@map("organizations")
+}
+
+// One-to-one with Organization. Kept separate per Section 5.1's framing of
+// "Company KYC" as a distinct sub-object, and so GST uniqueness gets its own
+// focused index without cluttering Organization's common-path search columns.
+model KycDetail {
+  id             String @id @default(cuid())
+  organizationId String @unique
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Optional at creation (Section 5.1 has no approval gate; real onboarding
+  // often starts before GST is on hand) but unique when present — a Postgres
+  // unique index allows multiple NULLs, so this doesn't block GST-less orgs.
+  gstNumber String? @unique
+  panNumber String?
+  tanNumber String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("kyc_details")
+}
+
+enum ImportEntityType {
+  CUSTOMER
+  JOB // reserved for Stage 4's historical-Job import extension — unused in Stage 1
+}
+
+enum ImportBatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ImportBatch {
+  id         String           @id @default(cuid())
+  entityType ImportEntityType @default(CUSTOMER)
+  fileName   String
+
+  status        ImportBatchStatus @default(PENDING)
+  columnMapping Json?
+  totalRows     Int               @default(0)
+  validRows     Int               @default(0)
+  invalidRows   Int               @default(0)
+  importedRows  Int               @default(0)
+  failureReason String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+
+  rowErrors     ImportRowError[]
+  organizations Organization[]
+
+  @@index([uploadedById])
+  @@index([status])
+  @@map("import_batches")
+}
+
+model ImportRowError {
+  id            String      @id @default(cuid())
+  importBatchId String
+  importBatch   ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+
+  rowNumber Int // 1-based, matches the row's position in the source file
+  rawData   Json // the row as parsed, surfaced in the CSV download
+  errors    Json // Array<{ field: string; message: string }>
+
+  createdAt DateTime @default(now())
+
+  @@index([importBatchId])
+  @@map("import_row_errors")
 }

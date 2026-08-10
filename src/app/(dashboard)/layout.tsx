@@ -9,6 +9,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!session?.user) redirect("/login");
 
   const branches = await prisma.branch.findMany({
+    where: { isActive: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
