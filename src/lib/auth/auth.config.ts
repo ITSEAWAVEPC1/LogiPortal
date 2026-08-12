@@ -1,9 +1,12 @@
 import type { NextAuthConfig } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 
-// Edge-safe config: no providers with DB/bcrypt access here, since
-// middleware runs on the Edge runtime and can't use Prisma or bcryptjs.
-// The Credentials provider itself lives in ./auth.ts, which extends this.
+// Minimal, provider-free config kept separate from ./auth.ts so src/proxy.ts
+// (Next.js 16's renamed middleware.ts) never pulls in the Credentials
+// provider's Prisma/bcrypt dependency — proxy now defaults to the Node.js
+// runtime rather than edge, but the split still keeps the request-gating
+// file as small as possible. The Credentials provider itself lives in
+// ./auth.ts, which extends this.
 export const authConfig = {
   pages: {
     signIn: "/login",
