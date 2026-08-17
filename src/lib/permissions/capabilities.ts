@@ -10,7 +10,7 @@ import type { Role } from "./roles";
 // (Stage 3) and Documents later, so it's established here on its first real
 // use rather than retrofitted across three screens at once.
 export type Action = "view" | "create" | "edit" | "delete" | "approve";
-export type CapabilityScreen = "customers" | "branches" | "users" | "dataImport" | "enquiries";
+export type CapabilityScreen = "customers" | "branches" | "users" | "dataImport" | "enquiries" | "billTypes";
 
 const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = {
   ADMIN: {
@@ -19,6 +19,9 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     users: ["view", "create", "edit", "delete"],
     dataImport: ["view", "create"],
     enquiries: ["view", "create", "edit", "approve"],
+    // Admin-configurable Billing master (Customer Master v2) — new Bill
+    // Types can be added without a deploy, per the acceptance criteria.
+    billTypes: ["view", "create", "edit", "delete"],
   },
   BRANCH_MANAGER: {
     customers: ["view", "edit"],

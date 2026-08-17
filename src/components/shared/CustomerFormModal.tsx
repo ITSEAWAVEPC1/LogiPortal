@@ -1,17 +1,24 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Button, Input, Modal, Select } from "@/components/ui";
+import { Button, Checkbox, Input, Modal, Select } from "@/components/ui";
 
 export interface OrganizationRow {
   id: string;
   name: string;
+  alias: string | null;
   contactPersonName: string | null;
   contactPersonPhone: string | null;
   contactPersonEmail: string | null;
   city: string | null;
   state: string | null;
   branchId: string | null;
+  isShipper: boolean;
+  isConsignee: boolean;
+  isAgent: boolean;
+  isCarrier: boolean;
+  isService: boolean;
+  isGlobal: boolean;
   kycDetail: { gstNumber: string | null; panNumber: string | null; tanNumber: string | null } | null;
 }
 
@@ -33,12 +40,19 @@ interface CustomerFormModalProps {
 
 const EMPTY_FORM = {
   name: "",
+  alias: "",
   contactPersonName: "",
   contactPersonPhone: "",
   contactPersonEmail: "",
   city: "",
   state: "",
   branchId: "",
+  isShipper: false,
+  isConsignee: false,
+  isAgent: false,
+  isCarrier: false,
+  isService: false,
+  isGlobal: false,
   gstNumber: "",
   panNumber: "",
   tanNumber: "",
@@ -48,12 +62,19 @@ function formFromOrganization(organization?: OrganizationRow) {
   if (!organization) return EMPTY_FORM;
   return {
     name: organization.name,
+    alias: organization.alias ?? "",
     contactPersonName: organization.contactPersonName ?? "",
     contactPersonPhone: organization.contactPersonPhone ?? "",
     contactPersonEmail: organization.contactPersonEmail ?? "",
     city: organization.city ?? "",
     state: organization.state ?? "",
     branchId: organization.branchId ?? "",
+    isShipper: organization.isShipper,
+    isConsignee: organization.isConsignee,
+    isAgent: organization.isAgent,
+    isCarrier: organization.isCarrier,
+    isService: organization.isService,
+    isGlobal: organization.isGlobal,
     gstNumber: organization.kycDetail?.gstNumber ?? "",
     panNumber: organization.kycDetail?.panNumber ?? "",
     tanNumber: organization.kycDetail?.tanNumber ?? "",
@@ -120,12 +141,27 @@ function CustomerForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <Input
-        label="Customer name"
-        required
-        value={form.name}
-        onChange={(e) => setForm({ ...form, name: e.target.value })}
-      />
+      <div className="grid grid-cols-2 gap-3">
+        <Input
+          label="Customer name"
+          required
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+        <Input label="Alias" value={form.alias} onChange={(e) => setForm({ ...form, alias: e.target.value })} />
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-md border border-border-subtle p-2">
+        <Checkbox label="Shipper" checked={form.isShipper} onChange={(e) => setForm({ ...form, isShipper: e.target.checked })} />
+        <Checkbox
+          label="Consignee"
+          checked={form.isConsignee}
+          onChange={(e) => setForm({ ...form, isConsignee: e.target.checked })}
+        />
+        <Checkbox label="Agent" checked={form.isAgent} onChange={(e) => setForm({ ...form, isAgent: e.target.checked })} />
+        <Checkbox label="Carrier" checked={form.isCarrier} onChange={(e) => setForm({ ...form, isCarrier: e.target.checked })} />
+        <Checkbox label="Services" checked={form.isService} onChange={(e) => setForm({ ...form, isService: e.target.checked })} />
+        <Checkbox label="Global" checked={form.isGlobal} onChange={(e) => setForm({ ...form, isGlobal: e.target.checked })} />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <Input
           label="Contact person"

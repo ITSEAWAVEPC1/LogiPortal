@@ -26,6 +26,14 @@ export default async function SettingsPage() {
               <p className="mt-1 text-sm text-text-secondary">Manage staff accounts, roles, and branch assignment.</p>
             </Card>
           </Link>
+          <Link href="/settings/bill-types">
+            <Card className="transition-colors hover:border-brand-teal">
+              <h2 className="text-sm font-semibold text-text-primary">Bill Types</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Manage the Bill Type master used by the Customer Billing tab.
+              </p>
+            </Card>
+          </Link>
         </div>
       </div>
     );

@@ -10,3 +10,4 @@ export * from "./DataTable";
 export * from "./StepTracker";
 export * from "./FileDropzone";
 export * from "./Combobox";
+export * from "./ColumnPicker";

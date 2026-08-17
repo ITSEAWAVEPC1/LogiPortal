@@ -79,6 +79,51 @@ const FIELD_PERMISSIONS: Record<Role, Record<string, FieldAccessLevel>> = {
   },
 };
 
+// Customer Master v2 — Billing tab's Bill Type master, seeded from the names
+// visible in docs/customer-master-competitor-reference.pdf's Billing screen
+// (dropdown wasn't scrolled further, so this may not be the full list).
+// Preserved verbatim, including the source system's own spelling.
+const BILL_TYPE_NAMES = [
+  "DEBIT NOTE CLEARANCE",
+  "EXPORT E-INVOICE",
+  "EXPORT GEN INV JBN-E-INVOICE",
+  "EXPORT INVOICE JGN",
+  "EXPORT REIMBURESEMENT E-INVOICE",
+  "EXPORT-FREIGHT INVOICE",
+  "Gen Debit Note",
+  "GEN-FREIGHT INVOICE",
+  "GENERAL E-INVOICE",
+  "GENERAL REIMBURSEMENT E-INVOICE",
+  "IMP/EXP REIMBURESEMENT TAXABLE E-INVOICE",
+  "IMPORT E-INVOICE",
+  "IMPORT REIMBURESEMENT E-INVOICE",
+  "IMPORT-FREIGHT INVOICE",
+  "KOL-IMP INVOICE- E-INVOICE",
+  "KOL-TRANSPORT INVOICE",
+  "TRANSPORT EXPORT",
+  "TRANSPORT IMPORT",
+];
+
+function billTypeCode(name: string) {
+  return name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+// Customer Master v2 field groups for the "organization" resource. Account
+// Info/Billing are Accounts-editable (Sales view-only on these financial
+// fields); Branches/Addresses/Contacts mirror the Doer/Branch Manager edit
+// rights already established on the "job" resource's non-financial groups.
+const ORGANIZATION_FIELD_PERMISSIONS: Record<Role, Record<string, FieldAccessLevel>> = {
+  ADMIN: { accountInfo: "EDIT", billing: "EDIT", branches: "EDIT", addresses: "EDIT", contacts: "EDIT" },
+  BRANCH_MANAGER: { accountInfo: "VIEW", billing: "VIEW", branches: "EDIT", addresses: "EDIT", contacts: "EDIT" },
+  DOER: { accountInfo: "NONE", billing: "NONE", branches: "EDIT", addresses: "EDIT", contacts: "EDIT" },
+  SALES: { accountInfo: "VIEW", billing: "VIEW", branches: "VIEW", addresses: "VIEW", contacts: "VIEW" },
+  ACCOUNTS: { accountInfo: "EDIT", billing: "EDIT", branches: "VIEW", addresses: "VIEW", contacts: "VIEW" },
+  CUSTOMER: { accountInfo: "NONE", billing: "NONE", branches: "NONE", addresses: "NONE", contacts: "NONE" },
+};
+
 async function main() {
   console.log("Seeding branches...");
   const branches = await Promise.all(
@@ -116,6 +161,30 @@ async function main() {
         create: { role, resource: "job", fieldGroup, access },
       });
     }
+  }
+
+  console.log("Seeding organization field permissions...");
+  for (const [role, groups] of Object.entries(ORGANIZATION_FIELD_PERMISSIONS) as [
+    Role,
+    Record<string, FieldAccessLevel>,
+  ][]) {
+    for (const [fieldGroup, access] of Object.entries(groups)) {
+      await prisma.fieldPermission.upsert({
+        where: { role_resource_fieldGroup: { role, resource: "organization", fieldGroup } },
+        update: { access },
+        create: { role, resource: "organization", fieldGroup, access },
+      });
+    }
+  }
+
+  console.log("Seeding bill types...");
+  for (const name of BILL_TYPE_NAMES) {
+    const code = billTypeCode(name);
+    await prisma.billType.upsert({
+      where: { code },
+      update: { name },
+      create: { name, code },
+    });
   }
 
   console.log("Done. Test users (password: %s):", TEST_PASSWORD);

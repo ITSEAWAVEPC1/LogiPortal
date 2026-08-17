@@ -8,12 +8,23 @@ import { GST_REGEX, PAN_REGEX, TAN_REGEX, normalizeGst, normalizePan, normalizeT
 // but validated when present.
 export const organizationInputSchema = z.object({
   name: z.string().trim().min(1, "Customer name is required"),
+  alias: z.string().trim().optional().or(z.literal("")),
   contactPersonName: z.string().trim().optional().or(z.literal("")),
   contactPersonPhone: z.string().trim().optional().or(z.literal("")),
   contactPersonEmail: z.email("Invalid email").optional().or(z.literal("")),
   city: z.string().trim().optional().or(z.literal("")),
   state: z.string().trim().optional().or(z.literal("")),
   branchId: z.string().trim().optional().or(z.literal("")),
+  // One Organization record can play multiple roles at once (Customer Master
+  // v2) — all optional/defaulted so the bulk importer's existing rows (which
+  // never supply these) keep validating unchanged.
+  isShipper: z.boolean().optional().default(false),
+  isConsignee: z.boolean().optional().default(false),
+  isAgent: z.boolean().optional().default(false),
+  isCarrier: z.boolean().optional().default(false),
+  isService: z.boolean().optional().default(false),
+  isGlobal: z.boolean().optional().default(false),
+  defaultCurrency: z.string().trim().optional().or(z.literal("")),
   gstNumber: z
     .string()
     .optional()

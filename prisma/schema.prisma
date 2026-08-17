@@ -62,6 +62,11 @@ model User {
   enquiriesAsDoer      Enquiry[]      @relation("EnquiryDoer")
   enquiriesReviewed    Enquiry[]      @relation("EnquiryReviewedBy")
 
+  branchesAsSalesPerson         OrganizationBranch[]   @relation("BranchSalesPerson")
+  branchesAsCollectionExecutive OrganizationBranch[]   @relation("BranchCollectionExecutive")
+  branchAccountManagerFor       BranchAccountManager[] @relation("BranchAccountManagerUser")
+  columnPreferences             UserColumnPreference[]
+
   @@map("users")
 }
 
@@ -85,13 +90,13 @@ model Session {
 // (role, resource, fieldGroup) -> access. Queried at request time by
 // src/lib/permissions/field-permissions.ts.
 model FieldPermission {
-  id         String            @id @default(cuid())
+  id         String           @id @default(cuid())
   role       Role
   resource   String
   fieldGroup String
   access     FieldAccessLevel
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
   @@unique([role, resource, fieldGroup])
   @@map("field_permissions")
@@ -104,6 +109,7 @@ model FieldPermission {
 model Organization {
   id                 String   @id @default(cuid())
   name               String
+  alias              String?
   contactPersonName  String?
   contactPersonPhone String?
   contactPersonEmail String?
@@ -112,6 +118,19 @@ model Organization {
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  // Role flags — one Organization record can play multiple roles at once
+  // (Customer Master v2, Section: "Organization all available options").
+  isShipper   Boolean @default(false)
+  isConsignee Boolean @default(false)
+  isAgent     Boolean @default(false)
+  isCarrier   Boolean @default(false)
+  isService   Boolean @default(false)
+  isGlobal    Boolean @default(false)
+
+  // Billing tab default; individual OrganizationBillType rows can still carry
+  // their own currency-relevant behavior via Bank Details.
+  defaultCurrency String?
 
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id])
@@ -125,6 +144,14 @@ model Organization {
 
   kycDetail KycDetail?
   enquiries Enquiry[]
+
+  branches            OrganizationBranch[]
+  customerAccountInfo CustomerAccountInfo?
+  vendorAccountInfo   VendorAccountInfo?
+  billTypes           OrganizationBillType[]
+  // Reverse side of OrganizationBillType.billToOrganization — other orgs that
+  // name this Organization as their "Bill To: Other" target.
+  billToForOthers     OrganizationBillType[] @relation("BillToOrganization")
 
   @@index([branchId])
   @@index([name])
@@ -369,4 +396,276 @@ model EnquiryTransportDetail {
   updatedAt DateTime @updatedAt
 
   @@map("enquiry_transport_details")
+}
+
+// ---------------------------------------------------------------------------
+// Customer Master v2 — Organization enhancement (Branches, Account Info,
+// Billing, Bank Details, per-user list column preferences). Additive only.
+// See docs/stage-checklists/customer-master-v2.md.
+// ---------------------------------------------------------------------------
+
+enum BankAccountKind {
+  PAYABLE
+  RECEIVABLE
+}
+
+enum BillToType {
+  DIRECT
+  OTHER
+}
+
+// Only "Transaction Date" was visible in the reference screenshot (the
+// dropdown wasn't opened in the recording) — INVOICE_DATE/BILL_DATE are a
+// reasonable placeholder set for a freight-billing due-date basis, flagged
+// in the stage checklist as an assumption to confirm against the real system.
+enum DueDateBasis {
+  TRANSACTION_DATE
+  INVOICE_DATE
+  BILL_DATE
+}
+
+// Same caveat as DueDateBasis — only "No Grouping of Invoice Charges" was
+// visible as the selected value; the other members are placeholders.
+enum ClubChargesOption {
+  NO_GROUPING
+  GROUP_BY_SHIPMENT
+  GROUP_BY_JOB
+}
+
+// A customer/vendor organization's own branch offices — distinct from the
+// `Branch` model (Seawave's internal offices used for User/Organization
+// assignment). One Organization has many OrganizationBranches.
+model OrganizationBranch {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  branchName    String
+  address       String?
+  isDefault     Boolean @default(false)
+  isDeactivated Boolean @default(false)
+  country       String?
+  state         String?
+  city          String?
+  postalCode    String?
+  telephone     String?
+  fax           String?
+  website       String?
+  email         String?
+  lobWise       Boolean @default(false)
+  // Free-text rather than an enum — only "Standard" was visible in the
+  // reference screen's dropdown (never opened), so the full option set is
+  // unconfirmed. Defaults to the one confirmed value.
+  taxableType   String  @default("Standard")
+
+  salesPersonId String?
+  salesPerson   User?   @relation("BranchSalesPerson", fields: [salesPersonId], references: [id])
+
+  collectionExecutiveId String?
+  collectionExecutive   User?   @relation("BranchCollectionExecutive", fields: [collectionExecutiveId], references: [id])
+
+  addresses       BranchAddress[]
+  contacts        BranchContact[]
+  accountManagers BranchAccountManager[]
+  bankAccounts    OrganizationBankAccount[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@map("organization_branches")
+}
+
+// Secondary addresses beyond the branch's own (reference screen's "More
+// Addresses" tab), e.g. a distinct Delivery address.
+model BranchAddress {
+  id       String             @id @default(cuid())
+  branchId String
+  branch   OrganizationBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  addressType String
+  name        String?
+  address     String?
+  city        String?
+  postalCode  String?
+  state       String?
+  telephone   String?
+  fax         String?
+  email       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@map("branch_addresses")
+}
+
+model BranchContact {
+  id       String             @id @default(cuid())
+  branchId String
+  branch   OrganizationBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  contactName      String
+  titleDesignation String?
+  department       String?
+  mobile           String?
+  telephone        String?
+  email            String?
+  isPrimary        Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@map("branch_contacts")
+}
+
+// "For" category (e.g. "Consignee Sea" / "Consignee Land") is free-text —
+// only two example rows were visible in the reference screen; the full
+// category list is unconfirmed. One manager per (branch, category).
+model BranchAccountManager {
+  id       String             @id @default(cuid())
+  branchId String
+  branch   OrganizationBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  forCategory String
+
+  managerUserId String?
+  manager       User?   @relation("BranchAccountManagerUser", fields: [managerUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, forCategory])
+  @@map("branch_account_managers")
+}
+
+model OrganizationBankAccount {
+  id       String             @id @default(cuid())
+  branchId String
+  branch   OrganizationBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  accountKind         BankAccountKind
+  bankName            String
+  bankBranch          String?
+  accountNumber       String
+  ifsc                String?
+  // Only meaningful when accountKind = RECEIVABLE, per the reference screen
+  // (the Payable Details grid has no currency column).
+  transactionCurrency String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@map("organization_bank_accounts")
+}
+
+// Customer-side Account Info (Account Info > General > Customer sub-tab).
+// No prior Decimal usage in this schema and no accounting stage built yet —
+// Float keeps this consistent with the rest of the app rather than adding
+// Decimal/JSON-serialization handling for the first money field.
+model CustomerAccountInfo {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  creditLimit                 Float   @default(0)
+  isUnlimitedCredit           Boolean @default(false)
+  cashOnDelivery              Boolean @default(false)
+  includeWipShipmentInOverdue Boolean @default(false)
+  isCreditOnHold              Boolean @default(false)
+  creditOnHoldRemark          String?
+  receivableCreditPeriodDays  Int?
+  customerGLCode              String?
+  notificationEmails          String?
+  currency                    String?
+  tdsReceivable               Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("customer_account_infos")
+}
+
+// Vendor-side Account Info (Account Info > General > Vendor sub-tab).
+model VendorAccountInfo {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  creditLimit             Float        @default(0)
+  isUnlimitedCredit       Boolean      @default(false)
+  payableCreditPeriodDays Int?
+  dueDateCalculatedOn     DueDateBasis @default(TRANSACTION_DATE)
+  vendorGLCode            String?
+  notificationEmails      String?
+  currency                String?
+  isPaymentOnHold         Boolean      @default(false)
+  tdsPayable              Boolean      @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vendor_account_infos")
+}
+
+// Admin-configurable master list (Billing tab's Bill Type dropdown source).
+// Seeded from the reference screen's visible list — see prisma/seed.ts.
+model BillType {
+  id       String  @id @default(cuid())
+  name     String
+  code     String  @unique
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizationBillTypes OrganizationBillType[]
+
+  @@map("bill_types")
+}
+
+model OrganizationBillType {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  billTypeId String
+  billType   BillType @relation(fields: [billTypeId], references: [id])
+
+  dueAfterDays         Int?
+  overrideCreditPeriod Boolean    @default(false)
+  billTo               BillToType @default(DIRECT)
+
+  // Set only when billTo = OTHER.
+  billToOrganizationId String?
+  billToOrganization   Organization? @relation("BillToOrganization", fields: [billToOrganizationId], references: [id])
+
+  clubCharges ClubChargesOption @default(NO_GROUPING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, billTypeId])
+  @@index([organizationId])
+  @@map("organization_bill_types")
+}
+
+// Backs the Organization list's "Customize Columns" picker — persists which
+// columns a user has selected, per screen, so it survives reload. Generic by
+// screenKey so Reports/other list screens can reuse it later without a new
+// model (per the task's note that this pattern likely gets reused).
+model UserColumnPreference {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  screenKey String
+  columns   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, screenKey])
+  @@map("user_column_preferences")
 }

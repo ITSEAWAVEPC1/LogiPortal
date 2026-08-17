@@ -6,11 +6,11 @@ See docs/original-process-reference.pdf for the source field list per workflow s
 
 ## Status
 
-Stages 0, 1, 2 complete, committed, and pushed to `origin/main`. **Next up: Stage 3 (Quotation Module).**
+Stages 0, 1, 2 complete, committed, and pushed to `origin/main`. Customer Master v2 (Organization enhancement — Branches/Account Info/Billing/Bank Details/Customize Columns, built on Stage 1's Organization model) also complete, not yet committed — see `docs/stage-checklists/customer-master-v2.md`. **Next up: Stage 3 (Quotation Module).**
 
 Before starting a new stage, read `docs/stage-checklists/stage-{N}.md` for each completed stage — what was built, DB models added, decisions/assumptions made and why. Don't re-read the full codebase or re-derive decisions already written down there; open a specific file only to confirm an exact shape (a Prisma field name, a component prop) when it matters.
 
-Models so far: `User`, `Role`, `Branch`, `Session` (login-audit log only, not the real auth session), `FieldPermission` (Stage 0) · `Organization`, `KycDetail`, `ImportBatch`, `ImportRowError` (Stage 1) · `Enquiry`, `EnquiryFreightDetail`, `EnquiryCustomsDetail`, `EnquiryTransportDetail` (Stage 2).
+Models so far: `User`, `Role`, `Branch`, `Session` (login-audit log only, not the real auth session), `FieldPermission` (Stage 0) · `Organization`, `KycDetail`, `ImportBatch`, `ImportRowError` (Stage 1) · `Enquiry`, `EnquiryFreightDetail`, `EnquiryCustomsDetail`, `EnquiryTransportDetail` (Stage 2) · `OrganizationBranch`, `BranchAddress`, `BranchContact`, `BranchAccountManager`, `OrganizationBankAccount`, `CustomerAccountInfo`, `VendorAccountInfo`, `BillType`, `OrganizationBillType`, `UserColumnPreference` (Customer Master v2).
 
 ## Environment gotchas (this dev machine)
 
@@ -25,7 +25,7 @@ Models so far: `User`, `Role`, `Branch`, `Session` (login-audit log only, not th
 - `src/proxy.ts` (Next.js 16 renamed `middleware.ts` → `proxy.ts` — see its file comment if this trips up a future edit) is the request gate, and its matcher excludes `/api/*` entirely — there is **no edge/proxy-level auth on API routes**. Every route handler must call `auth()` and check permissions itself (see any existing route under `src/app/api/` for the pattern).
 - Three separate, deliberately-not-unified permission mechanisms — don't conflate them: `src/lib/permissions/access-matrix.ts` (sidebar nav visibility, boolean), `capabilities.ts` (per-action view/create/edit/delete/approve per role per screen), `field-permissions.ts` (DB-backed per-field-group access, for the Job entity's Section 4.3 matrix specifically).
 - Soft delete only, structurally — no DELETE verb exists on any API route anywhere in the app. Deactivation is always PATCH `{isActive: false}`.
-- Reuse before rebuilding: generic UI primitives live in `src/components/ui/` (Button, Card, Badge, Modal, Input, Select, Textarea, Checkbox, DataTable, StepTracker, FileDropzone, Combobox), shared cross-feature components in `src/components/shared/` (CustomerFormModal). Check there before writing something that might already exist.
+- Reuse before rebuilding: generic UI primitives live in `src/components/ui/` (Button, Card, Badge, Modal, Input, Select, Textarea, Checkbox, DataTable, StepTracker, FileDropzone, Combobox, ColumnPicker), shared cross-feature components in `src/components/shared/` (CustomerFormModal). Check there before writing something that might already exist.
 - Verify with direct API calls per role (a small Node fetch script, not just UI clicking) before calling a stage done — this has caught a real bug in every stage so far (a stale Prisma client, a transaction-timeout from per-row inserts vs. Neon's real network latency, a type-design flaw in a generic component, a React 19 lint rule catching a genuinely fragile pattern). Clean up test/verification data from the DB afterward — check `docs/stage-checklists/stage-2.md`'s cleanup section for the pattern (a small throwaway `tsx` script run and deleted, not committed).
 - Do not re-read the full codebase before starting a new stage.
 
