@@ -23,11 +23,18 @@ export async function GET(request: NextRequest) {
   const statusParam = searchParams.get("status");
   const status = STATUS_VALUES.find((s) => s === statusParam);
   const branchId = searchParams.get("branchId") ?? undefined;
+  const organizationId = searchParams.get("organizationId") ?? undefined;
+  // Added in Stage 3 so the Quotation builder can list an organization's
+  // Ready-for-Quotation enquiries that aren't already bundled into another
+  // Quotation — additive query param, existing callers unaffected.
+  const unattached = searchParams.get("unattached") === "true";
   const q = searchParams.get("q")?.trim();
 
   const where: Prisma.EnquiryWhereInput = {
     status,
     branchId: branchId || undefined,
+    organizationId: organizationId || undefined,
+    ...(unattached ? { quotationEnquiry: null } : {}),
     ...(q
       ? {
           OR: [

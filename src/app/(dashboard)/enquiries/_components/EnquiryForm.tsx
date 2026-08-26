@@ -6,7 +6,7 @@ import { Badge, Button, Card, Checkbox, Input, Select, Textarea } from "@/compon
 import type { Role } from "@/lib/permissions/roles";
 import { SERVICE_TYPE_OPTIONS, SHIPMENT_TYPE_OPTIONS, formatEnquiryRef } from "@/lib/validation/enquiry";
 import { useAutosave } from "@/lib/hooks/useAutosave";
-import { CustomerCombobox, type CustomerOption } from "./CustomerCombobox";
+import { CustomerCombobox, type CustomerOption } from "@/components/shared/CustomerCombobox";
 import { FreightForwardingFields, EMPTY_FREIGHT_DETAIL, type FreightDetailState } from "./FreightForwardingFields";
 import { CustomsClearanceFields, EMPTY_CUSTOMS_DETAIL, type CustomsDetailState } from "./CustomsClearanceFields";
 import { TransportationFields, EMPTY_TRANSPORT_DETAIL, type TransportDetailState } from "./TransportationFields";

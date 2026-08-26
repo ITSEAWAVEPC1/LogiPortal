@@ -10,7 +10,14 @@ import type { Role } from "./roles";
 // (Stage 3) and Documents later, so it's established here on its first real
 // use rather than retrofitted across three screens at once.
 export type Action = "view" | "create" | "edit" | "delete" | "approve";
-export type CapabilityScreen = "customers" | "branches" | "users" | "dataImport" | "enquiries" | "billTypes";
+export type CapabilityScreen =
+  | "customers"
+  | "branches"
+  | "users"
+  | "dataImport"
+  | "enquiries"
+  | "billTypes"
+  | "quotations";
 
 const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = {
   ADMIN: {
@@ -22,27 +29,36 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     // Admin-configurable Billing master (Customer Master v2) — new Bill
     // Types can be added without a deploy, per the acceptance criteria.
     billTypes: ["view", "create", "edit", "delete"],
+    quotations: ["view", "create", "edit", "approve"],
   },
   BRANCH_MANAGER: {
     customers: ["view", "edit"],
     branches: ["view"],
     enquiries: ["view", "edit", "approve"],
+    quotations: ["view", "edit", "approve"],
   },
   DOER: {
     customers: ["view", "create"],
     enquiries: ["view", "create", "edit"],
+    quotations: ["view"],
   },
   SALES: {
     customers: ["view", "create", "edit"],
     enquiries: ["view", "create", "edit"],
+    quotations: ["view", "create", "edit"],
   },
   ACCOUNTS: {
     customers: ["view"],
     enquiries: ["view"],
+    // Section 4.2: "View charges" — no field-level nuance matrix exists for
+    // Quotations the way Section 4.3 defines one for Jobs, so plain
+    // view-only at the whole-quotation level is the correct-scope default.
+    quotations: ["view"],
   },
-  // "Own org only" (Customer's real Section 4.2 right) needs User.organizationId,
-  // which doesn't exist until Stage 9 — see docs/stage-checklists/stage-1.md.
-  // No "enquiries" key at all here — Section 4.2 says No access.
+  // "Own org only" / "Own quotations, view only" (Customer's real Section 4.2
+  // right) needs User.organizationId, which doesn't exist until Stage 9 —
+  // see docs/stage-checklists/stage-1.md. No "enquiries"/"quotations" key at
+  // all here for Enquiries (No access); Quotations deferred the same way.
   CUSTOMER: {},
 };
 

@@ -28,6 +28,8 @@ interface CustomerComboboxProps {
 // GET /api/customers?q= search endpoint, and offers inline "+ Create new
 // customer" (Section 5.1: no approval gate, immediately selectable) by
 // reusing the shared CustomerFormModal — no duplicated create/validation logic.
+// Promoted from enquiries/_components to shared/ in Stage 3 so Quotations'
+// "bundle enquiries by customer" picker can reuse it unchanged too.
 export function CustomerCombobox({ value, displayValue, branches, onSelect }: CustomerComboboxProps) {
   const [createOpen, setCreateOpen] = useState(false);
 

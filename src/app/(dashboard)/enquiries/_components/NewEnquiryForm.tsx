@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Select } from "@/components/ui";
-import { CustomerCombobox, type CustomerOption } from "./CustomerCombobox";
+import { CustomerCombobox, type CustomerOption } from "@/components/shared/CustomerCombobox";
 
 interface Branch {
   id: string;

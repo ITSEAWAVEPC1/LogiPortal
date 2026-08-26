@@ -6,11 +6,11 @@ See docs/original-process-reference.pdf for the source field list per workflow s
 
 ## Status
 
-Stages 0, 1, 2 complete, committed, and pushed to `origin/main`. Customer Master v2 (Organization enhancement — Branches/Account Info/Billing/Bank Details/Customize Columns, built on Stage 1's Organization model) also complete, not yet committed — see `docs/stage-checklists/customer-master-v2.md`. **Next up: Stage 3 (Quotation Module).**
+Stages 0, 1, 2 complete, committed, and pushed to `origin/main`. Customer Master v2 (Organization enhancement — Branches/Account Info/Billing/Bank Details/Customize Columns, built on Stage 1's Organization model) and Stage 3 (Quotation Module) also complete, not yet committed — see `docs/stage-checklists/customer-master-v2.md` and `docs/stage-checklists/stage-3.md`. **Next up: Stage 4 (Consignment / Job Creation + Historical Job Import).**
 
 Before starting a new stage, read `docs/stage-checklists/stage-{N}.md` for each completed stage — what was built, DB models added, decisions/assumptions made and why. Don't re-read the full codebase or re-derive decisions already written down there; open a specific file only to confirm an exact shape (a Prisma field name, a component prop) when it matters.
 
-Models so far: `User`, `Role`, `Branch`, `Session` (login-audit log only, not the real auth session), `FieldPermission` (Stage 0) · `Organization`, `KycDetail`, `ImportBatch`, `ImportRowError` (Stage 1) · `Enquiry`, `EnquiryFreightDetail`, `EnquiryCustomsDetail`, `EnquiryTransportDetail` (Stage 2) · `OrganizationBranch`, `BranchAddress`, `BranchContact`, `BranchAccountManager`, `OrganizationBankAccount`, `CustomerAccountInfo`, `VendorAccountInfo`, `BillType`, `OrganizationBillType`, `UserColumnPreference` (Customer Master v2).
+Models so far: `User`, `Role`, `Branch`, `Session` (login-audit log only, not the real auth session), `FieldPermission` (Stage 0) · `Organization`, `KycDetail`, `ImportBatch`, `ImportRowError` (Stage 1) · `Enquiry`, `EnquiryFreightDetail`, `EnquiryCustomsDetail`, `EnquiryTransportDetail` (Stage 2) · `OrganizationBranch`, `BranchAddress`, `BranchContact`, `BranchAccountManager`, `OrganizationBankAccount`, `CustomerAccountInfo`, `VendorAccountInfo`, `BillType`, `OrganizationBillType`, `UserColumnPreference` (Customer Master v2) · `Quotation`, `QuotationEnquiry`, `QuotationVersion`, `QuotationLineItem` (Stage 3 — Enquiry↔Quotation is many-to-many, see `docs/stage-checklists/stage-3.md`).
 
 ## Environment gotchas (this dev machine)
 
