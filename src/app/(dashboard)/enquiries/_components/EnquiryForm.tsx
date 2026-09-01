@@ -166,9 +166,13 @@ function toAutosavePayload(form: FormState) {
     shipmentType: form.shipmentType || null,
     serviceTypes: form.serviceTypes,
     rfqReason: form.rfqReason || null,
-    freightDetail: form.freightDetail,
+    freightDetail: { ...form.freightDetail, cargoMode: form.freightDetail.cargoMode || null },
     customsDetail: form.customsDetail,
-    transportDetail: form.transportDetail,
+    transportDetail: {
+      ...form.transportDetail,
+      cargoMode: form.transportDetail.cargoMode || null,
+      deliveryType: form.transportDetail.deliveryType || null,
+    },
   };
 }
 
@@ -190,18 +194,16 @@ export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: En
 
   const editable = canEdit && (enquiry.status === "DRAFT" || enquiry.status === "NEEDS_CORRECTION" || role === "ADMIN");
 
-  const { status: autosaveStatus } = useAutosave(
-    form,
-    async (value) => {
-      const res = await fetch(`/api/enquiries/${enquiry.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(toAutosavePayload(value)),
-      });
-      if (!res.ok) throw new Error("Autosave failed");
-    },
-    { enabled: editable },
-  );
+  async function saveDraft(value: FormState) {
+    const res = await fetch(`/api/enquiries/${enquiry.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(toAutosavePayload(value)),
+    });
+    if (!res.ok) throw new Error("Autosave failed");
+  }
+
+  const { status: autosaveStatus } = useAutosave(form, saveDraft, { enabled: editable });
 
   const reference = useMemo(() => formatEnquiryRef(enquiry.createdAt, enquiry.sequenceNumber), [enquiry]);
 
@@ -217,6 +219,15 @@ export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: En
   async function handleSubmit() {
     setSubmitting(true);
     setSubmitError(null);
+
+    try {
+      await saveDraft(form);
+    } catch {
+      setSubmitting(false);
+      setSubmitError("Failed to save latest changes before submitting");
+      return;
+    }
+
     const res = await fetch(`/api/enquiries/${enquiry.id}/submit`, { method: "PATCH" });
     const body = await res.json();
     setSubmitting(false);
@@ -390,7 +401,7 @@ export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: En
 
       <div className="flex justify-end gap-2">
         {editable && (
-          <Button onClick={handleSubmit} disabled={submitting}>
+          <Button onClick={handleSubmit} disabled={submitting || autosaveStatus === "saving"}>
             {submitting ? "Submitting..." : "Submit Enquiry"}
           </Button>
         )}
