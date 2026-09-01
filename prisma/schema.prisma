@@ -40,6 +40,7 @@ model Branch {
   organizations Organization[]
   enquiries     Enquiry[]
   quotations    Quotation[]
+  jobs          Job[]
 
   @@map("branches")
 }
@@ -68,6 +69,9 @@ model User {
   quotationsCustomerApprovedBy Quotation[]        @relation("QuotationCustomerApprovedBy")
   quotationVersionsCreated     QuotationVersion[] @relation("QuotationVersionCreatedBy")
   quotationVersionsApproved    QuotationVersion[] @relation("QuotationVersionApprovedBy")
+
+  createdJobs  Job[] @relation("JobCreatedBy")
+  jobsReviewed Job[] @relation("JobReviewedBy")
 
   branchesAsSalesPerson         OrganizationBranch[]   @relation("BranchSalesPerson")
   branchesAsCollectionExecutive OrganizationBranch[]   @relation("BranchCollectionExecutive")
@@ -152,6 +156,7 @@ model Organization {
   kycDetail  KycDetail?
   enquiries  Enquiry[]
   quotations Quotation[]
+  jobs       Job[]
 
   branches            OrganizationBranch[]
   customerAccountInfo CustomerAccountInfo?
@@ -223,9 +228,11 @@ model ImportBatch {
 
   rowErrors     ImportRowError[]
   organizations Organization[]
+  jobs          Job[]
 
   @@index([uploadedById])
   @@index([status])
+  @@index([entityType])
   @@map("import_batches")
 }
 
@@ -779,6 +786,10 @@ model QuotationEnquiry {
   jobSnapshot Json?
   convertedAt DateTime?
 
+  // Reverse side of Job.quotationEnquiryId (@unique) — the one Job built from
+  // this converted enquiry (Stage 4). Null until a Doer creates it.
+  job Job?
+
   createdAt DateTime @default(now())
 
   @@index([quotationId])
@@ -834,4 +845,197 @@ model QuotationLineItem {
 
   @@index([quotationVersionId])
   @@map("quotation_line_items")
+}
+
+// ---------------------------------------------------------------------------
+// Stage 4 — Consignment / Job Creation + Historical Job Import
+// A Job is built either from a CONVERTED Quotation's per-enquiry jobSnapshot
+// (origin QUOTATION, zero re-entry), created directly by a Doer (origin
+// DIRECT), or migrated via the bulk import wizard (origin IMPORTED). The Doer
+// completes the consignment fields; a Branch Manager final-review gate moves
+// it to WORKFLOW_IN_PROGRESS (the workflow engine itself is Stage 5/6).
+// Additive only. See docs/stage-checklists/stage-4.md.
+// ---------------------------------------------------------------------------
+
+enum JobStatus {
+  DRAFT
+  PENDING_REVIEW
+  NEEDS_CORRECTION
+  WORKFLOW_IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum JobOrigin {
+  QUOTATION
+  DIRECT
+  IMPORTED
+}
+
+model Job {
+  id     String    @id @default(cuid())
+  status JobStatus @default(DRAFT)
+  origin JobOrigin @default(QUOTATION)
+
+  // Numeric part of the human-facing reference (JOB-{year}-{sequenceNumber,
+  // padded}) — same global-autoincrement pattern as Enquiry/Quotation.
+  sequenceNumber Int @default(autoincrement())
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // Import vs Export drives which consignment field set is required at submit.
+  shipmentType ShipmentType
+  serviceTypes ServiceType[] @default([])
+
+  // Free-text (EXW/FOB/CIF/DDP/DDU/...), same as EnquiryFreightDetail.incoterm.
+  // Stage 5/6 reads this to attach the workflow template.
+  incoterm String?
+
+  // Set only for origin = QUOTATION — one Job per converted enquiry.
+  quotationEnquiryId String?           @unique
+  quotationEnquiry   QuotationEnquiry? @relation(fields: [quotationEnquiryId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("JobCreatedBy", fields: [createdById], references: [id])
+
+  // Branch Manager final-review gate (skipped for origin = IMPORTED).
+  reviewedById String?
+  reviewedBy   User?     @relation("JobReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  // Consignment fields the Doer completes (source PDF pages 3 & 5, plan 5.4).
+  agentDetails     String?
+  placeOfReceipt   String?
+  portOfLoading    String?
+  portOfDischarge  String?
+  placeOfDelivery  String?
+  shippingLineName String?
+  cfsName          String?
+  vesselName       String?
+  voyageNumber     String?
+  freeDaysAtPod    Int?
+  totalGrossWeight Float?
+  totalNetWeight   Float?
+  totalPackages    Int?
+  volumeCbm        Float?
+  commodity        String?
+  hsCode           String?
+
+  // Charges field group — full quotation line-item set copied in as an
+  // editable snapshot (no automatic per-shipment split; assumption carried
+  // forward from Stage 3). Editable later only by roles with charges = EDIT.
+  charges         Json?
+  chargesCurrency String?
+  quotedTotal     Float?
+
+  // Duty payment field group — kept shallow here; Stage 6 deepens the
+  // DDP/DDU landed-cost visibility rules.
+  dutyPaymentLiability String?
+  dutyAmount           Float?
+  dutyPaidBy           String?
+
+  // Internal notes / audit trail field group.
+  internalNotes String?
+
+  // Traceability: which bulk-import batch created this row, if any.
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  shipperDetail     ShipperDetail?
+  consigneeDetail   ConsigneeDetail?
+  notifyPartyDetail NotifyPartyDetail?
+  containers        ContainerDetail[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([shipmentType])
+  @@index([createdById])
+  @@map("jobs")
+}
+
+// Shipper / Consignee / Notify Party are three separate 1:1 detail tables
+// (mirrors Stage 2's three EnquiryXDetail tables, not one polymorphic table).
+model ShipperDetail {
+  id    String @id @default(cuid())
+  jobId String @unique
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  name          String?
+  address       String?
+  contactPerson String?
+  phone         String?
+  email         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("shipper_details")
+}
+
+model ConsigneeDetail {
+  id    String @id @default(cuid())
+  jobId String @unique
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  name          String?
+  address       String?
+  contactPerson String?
+  phone         String?
+  email         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("consignee_details")
+}
+
+model NotifyPartyDetail {
+  id    String @id @default(cuid())
+  jobId String @unique
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  name          String?
+  address       String?
+  contactPerson String?
+  phone         String?
+  email         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notify_party_details")
+}
+
+// Repeatable container rows per Job (add/edit/remove, mirroring the Quotation
+// line-item editor). containerType is free-text; count allows "3 x 40HC"
+// style rows without forcing one row per physical container.
+model ContainerDetail {
+  id    String @id @default(cuid())
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  containerNumber String?
+  sealNumber      String?
+  containerType   String?
+  count           Int?    @default(1)
+  grossWeight     Float?
+  tareWeight      Float?
+  netWeight       Float?
+  packageCount    Int?
+  sortOrder       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([jobId])
+  @@map("container_details")
 }

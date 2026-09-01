@@ -50,12 +50,19 @@ function similarity(a: string, b: string): number {
   return 1 - levenshtein(a, b) / maxLen;
 }
 
-/** Suggests the best-matching source header for each target field. */
-export function suggestColumnMapping(headers: string[]): Record<string, string | null> {
+/**
+ * Suggests the best-matching source header for each target field. `targetFields`
+ * defaults to the Customer set so every existing caller is unchanged; the Job
+ * importer (Stage 4) passes JOB_TARGET_FIELDS.
+ */
+export function suggestColumnMapping(
+  headers: string[],
+  targetFields: TargetField[] = CUSTOMER_TARGET_FIELDS,
+): Record<string, string | null> {
   const normalizedHeaders = headers.map((h) => ({ original: h, normalized: normalizeHeader(h) }));
   const mapping: Record<string, string | null> = {};
 
-  for (const field of CUSTOMER_TARGET_FIELDS) {
+  for (const field of targetFields) {
     let best: { header: string; score: number } | null = null;
 
     for (const { original, normalized } of normalizedHeaders) {

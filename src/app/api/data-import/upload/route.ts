@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { parseWorkbook } from "@/lib/import/parse-workbook";
 import { suggestColumnMapping } from "@/lib/import/column-matcher";
+import { isImportEntity, targetFieldsFor } from "@/lib/import/entity-config";
 
 // Generous for a few-hundred-row sheet; caps worst-case parse cost per request.
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -17,6 +18,8 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const file = formData.get("file");
+  const entityTypeRaw = formData.get("entityType");
+  const entityType = isImportEntity(entityTypeRaw) ? entityTypeRaw : "CUSTOMER";
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
   }
@@ -41,6 +44,7 @@ export async function POST(request: NextRequest) {
   // Section 6 point 6's traceability requirement.
   const importBatch = await prisma.importBatch.create({
     data: {
+      entityType,
       fileName: file.name,
       uploadedById: session.user.id,
       totalRows: parsed.rows.length,
@@ -50,9 +54,10 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     importBatchId: importBatch.id,
+    entityType,
     headers: parsed.headers,
     rows: parsed.rows,
-    suggestedMapping: suggestColumnMapping(parsed.headers),
+    suggestedMapping: suggestColumnMapping(parsed.headers, targetFieldsFor(entityType)),
     totalRows: parsed.rows.length,
   });
 }

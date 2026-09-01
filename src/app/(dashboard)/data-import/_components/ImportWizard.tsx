@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge, Button, Card, DataTable, FileDropzone, Select, StepTracker } from "@/components/ui";
 import type { Step } from "@/components/ui/StepTracker";
-import { CUSTOMER_TARGET_FIELDS } from "@/lib/import/column-matcher";
+import { type ImportEntity, targetFieldsFor } from "@/lib/import/entity-config";
 import type { ValidationResult } from "@/lib/import/validate-customer-rows";
 
 type WizardStep = "upload" | "map" | "validate" | "summary";
@@ -24,8 +24,10 @@ const STEP_ORDER: { key: WizardStep; label: string }[] = [
   { key: "summary", label: "Summary" },
 ];
 
-export function ImportWizard() {
+export function ImportWizard({ entityType = "CUSTOMER" }: { entityType?: ImportEntity }) {
   const router = useRouter();
+  const targetFields = useMemo(() => targetFieldsFor(entityType), [entityType]);
+  const previewField = useMemo(() => targetFields.find((f) => f.required) ?? targetFields[0], [targetFields]);
   const [step, setStep] = useState<WizardStep>("upload");
   const [importBatchId, setImportBatchId] = useState<string | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -61,6 +63,7 @@ export function ImportWizard() {
     setError(null);
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("entityType", entityType);
 
     const res = await fetch("/api/data-import/upload", { method: "POST", body: formData });
     const body = await res.json();
@@ -84,7 +87,7 @@ export function ImportWizard() {
     const res = await fetch("/api/data-import/validate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows, mapping }),
+      body: JSON.stringify({ rows, mapping, entityType }),
     });
     const body = await res.json();
     setLoading(false);
@@ -104,7 +107,7 @@ export function ImportWizard() {
     const res = await fetch("/api/data-import/commit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ importBatchId, rows, mapping }),
+      body: JSON.stringify({ importBatchId, rows, mapping, entityType }),
     });
     const body = await res.json();
     setLoading(false);
@@ -144,7 +147,7 @@ export function ImportWizard() {
             Match each platform field to a column in your file. Fields marked required must be mapped.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            {CUSTOMER_TARGET_FIELDS.map((field) => (
+            {targetFields.map((field) => (
               <Select
                 key={field.key}
                 label={field.label + (field.required ? " *" : "")}
@@ -159,7 +162,10 @@ export function ImportWizard() {
             <Button variant="ghost" onClick={reset}>
               Start over
             </Button>
-            <Button onClick={handleValidate} disabled={loading || !mapping.name}>
+            <Button
+              onClick={handleValidate}
+              disabled={loading || targetFields.some((f) => f.required && !mapping[f.key])}
+            >
               {loading ? "Validating..." : "Validate"}
             </Button>
           </div>
@@ -176,7 +182,7 @@ export function ImportWizard() {
             <DataTable
               columns={[
                 { key: "rowNumber", header: "Row" },
-                { key: "name", header: "Name", render: (r) => r.mapped.name || "—" },
+                { key: "preview", header: previewField.label, render: (r) => r.mapped[previewField.key] || "—" },
                 {
                   key: "errors",
                   header: "Errors",

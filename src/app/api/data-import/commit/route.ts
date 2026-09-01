@@ -3,9 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
+import { isImportEntity } from "@/lib/import/entity-config";
 import { validateCustomerRows } from "@/lib/import/validate-customer-rows";
+import { validateJobRows } from "@/lib/import/validate-job-rows";
 import { normalizeGst, normalizePan, normalizeTan } from "@/lib/validation/kyc";
+import { parseImportNumber } from "@/lib/validation/job";
 import { Prisma } from "@/generated/prisma/client";
+
+interface CommitCounts {
+  validRows: number;
+  invalidRows: number;
+}
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -18,6 +26,7 @@ export async function POST(request: NextRequest) {
   const importBatchId = body.importBatchId as string | undefined;
   const rows = body.rows as Record<string, string>[] | undefined;
   const mapping = body.mapping as Record<string, string | null> | undefined;
+  const entityType = isImportEntity(body.entityType) ? body.entityType : "CUSTOMER";
   if (!importBatchId || !Array.isArray(rows) || !mapping) {
     return NextResponse.json({ error: "Missing importBatchId, rows, or mapping" }, { status: 400 });
   }
@@ -33,71 +42,22 @@ export async function POST(request: NextRequest) {
     data: { status: "PROCESSING", startedAt: new Date(), columnMapping: mapping },
   });
 
-  // Always re-validate server-side — never trust client-computed validity.
-  const { rows: validated } = await validateCustomerRows(rows, mapping);
-  const validRows = validated.filter((r) => r.valid);
-  const invalidRows = validated.filter((r) => !r.valid);
-
-  // IDs generated client-side (not left to Prisma's @default(cuid())) so
-  // Organization and KycDetail rows can be inserted via createMany — a
-  // handful of round trips total, not one round trip per row. A sequential
-  // .create() per row (170+ round trips to Neon) was the first approach here
-  // and reliably blew even a 30s transaction timeout purely on network RTT;
-  // batching is a correctness requirement at this row count, not an
-  // optimization.
-  const orgIds = validRows.map(() => randomUUID());
-  const organizationsData = validRows.map((row, i) => ({
-    id: orgIds[i],
-    name: row.mapped.name,
-    contactPersonName: row.mapped.contactPersonName || null,
-    contactPersonPhone: row.mapped.contactPersonPhone || null,
-    contactPersonEmail: row.mapped.contactPersonEmail || null,
-    city: row.mapped.city || null,
-    state: row.mapped.state || null,
-    createdById: session.user.id,
-    importBatchId,
-  }));
-  const kycDetailsData = validRows.map((row, i) => ({
-    id: randomUUID(),
-    organizationId: orgIds[i],
-    gstNumber: row.mapped.gstNumber ? normalizeGst(row.mapped.gstNumber) : null,
-    panNumber: row.mapped.panNumber ? normalizePan(row.mapped.panNumber) : null,
-    tanNumber: row.mapped.tanNumber ? normalizeTan(row.mapped.tanNumber) : null,
-  }));
-
-  // Single array-form transaction: atomic. Either everything commits (valid
-  // rows inserted, invalid rows logged) or (on any failure) NONE of it does
-  // and the batch is marked FAILED — matching the failover spec's "a failed
-  // batch rolls back entirely, not leave partial data" literally.
   try {
-    await prisma.$transaction([
-      ...(organizationsData.length > 0 ? [prisma.organization.createMany({ data: organizationsData })] : []),
-      ...(kycDetailsData.length > 0 ? [prisma.kycDetail.createMany({ data: kycDetailsData })] : []),
-      ...(invalidRows.length > 0
-        ? [
-            prisma.importRowError.createMany({
-              data: invalidRows.map((row) => ({
-                importBatchId,
-                rowNumber: row.rowNumber,
-                rawData: row.raw,
-                errors: row.errors as unknown as Prisma.InputJsonValue,
-              })),
-            }),
-          ]
-        : []),
-    ]);
+    const counts =
+      entityType === "JOB"
+        ? await commitJobRows(importBatchId, rows, mapping, session.user.id)
+        : await commitCustomerRows(importBatchId, rows, mapping, session.user.id);
 
     const updated = await prisma.importBatch.update({
       where: { id: importBatchId },
       data: {
         status: "COMPLETED",
-        validRows: validRows.length,
-        invalidRows: invalidRows.length,
-        importedRows: validRows.length,
+        validRows: counts.validRows,
+        invalidRows: counts.invalidRows,
+        importedRows: counts.validRows,
         completedAt: new Date(),
       },
     });
-
     return NextResponse.json({ importBatch: updated });
   } catch (error) {
     const failed = await prisma.importBatch.update({
@@ -110,4 +70,158 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ error: "Import failed", importBatch: failed }, { status: 500 });
   }
+}
+
+// --- Customer commit (Stage 1, unchanged behaviour) ---------------------------
+//
+// IDs generated client-side (not Prisma's @default(cuid())) so parent + child
+// rows link without nested writes and insert via createMany — a handful of
+// round trips total, not one per row. A single array-form $transaction: either
+// everything commits or (on any failure) nothing does and the batch is FAILED.
+async function commitCustomerRows(
+  importBatchId: string,
+  rows: Record<string, string>[],
+  mapping: Record<string, string | null>,
+  userId: string,
+): Promise<CommitCounts> {
+  const { rows: validated } = await validateCustomerRows(rows, mapping);
+  const validRows = validated.filter((r) => r.valid);
+  const invalidRows = validated.filter((r) => !r.valid);
+
+  const orgIds = validRows.map(() => randomUUID());
+  const organizationsData = validRows.map((row, i) => ({
+    id: orgIds[i],
+    name: row.mapped.name,
+    contactPersonName: row.mapped.contactPersonName || null,
+    contactPersonPhone: row.mapped.contactPersonPhone || null,
+    contactPersonEmail: row.mapped.contactPersonEmail || null,
+    city: row.mapped.city || null,
+    state: row.mapped.state || null,
+    createdById: userId,
+    importBatchId,
+  }));
+  const kycDetailsData = validRows.map((row, i) => ({
+    id: randomUUID(),
+    organizationId: orgIds[i],
+    gstNumber: row.mapped.gstNumber ? normalizeGst(row.mapped.gstNumber) : null,
+    panNumber: row.mapped.panNumber ? normalizePan(row.mapped.panNumber) : null,
+    tanNumber: row.mapped.tanNumber ? normalizeTan(row.mapped.tanNumber) : null,
+  }));
+
+  await prisma.$transaction([
+    ...(organizationsData.length > 0 ? [prisma.organization.createMany({ data: organizationsData })] : []),
+    ...(kycDetailsData.length > 0 ? [prisma.kycDetail.createMany({ data: kycDetailsData })] : []),
+    ...rowErrorInserts(importBatchId, invalidRows),
+  ]);
+
+  return { validRows: validRows.length, invalidRows: invalidRows.length };
+}
+
+// --- Job commit (Stage 4) ---------------------------------------------------
+//
+// Same client-ID + array-form $transaction pattern, fanned out across Job +
+// its optional detail tables. Historical Jobs land at their mapped JobStatus
+// with origin IMPORTED — no Branch Manager review.
+async function commitJobRows(
+  importBatchId: string,
+  rows: Record<string, string>[],
+  mapping: Record<string, string | null>,
+  userId: string,
+): Promise<CommitCounts> {
+  const { rows: validated, resolved } = await validateJobRows(rows, mapping);
+  const validRows = validated.filter((r) => r.valid);
+  const invalidRows = validated.filter((r) => !r.valid);
+
+  const jobIds = validRows.map(() => randomUUID());
+  const toInt = (v: string) => {
+    const n = parseImportNumber(v);
+    return n === null ? null : Math.round(n);
+  };
+
+  const jobsData = validRows.map((row, i) => {
+    const r = resolved[row.rowNumber];
+    const m = row.mapped;
+    return {
+      id: jobIds[i],
+      origin: "IMPORTED" as const,
+      status: r.status,
+      branchId: r.branchId,
+      organizationId: r.organizationId,
+      shipmentType: r.shipmentType,
+      serviceTypes: r.serviceTypes as unknown as Prisma.JobCreateManyInput["serviceTypes"],
+      incoterm: m.incoterm || null,
+      agentDetails: m.agentDetails || null,
+      placeOfReceipt: m.placeOfReceipt || null,
+      portOfLoading: m.portOfLoading || null,
+      portOfDischarge: m.portOfDischarge || null,
+      placeOfDelivery: m.placeOfDelivery || null,
+      shippingLineName: m.shippingLineName || null,
+      cfsName: m.cfsName || null,
+      vesselName: m.vesselName || null,
+      voyageNumber: m.voyageNumber || null,
+      freeDaysAtPod: toInt(m.freeDaysAtPod),
+      totalGrossWeight: parseImportNumber(m.totalGrossWeight),
+      totalNetWeight: parseImportNumber(m.totalNetWeight),
+      totalPackages: toInt(m.totalPackages),
+      volumeCbm: parseImportNumber(m.volumeCbm),
+      commodity: m.commodity || null,
+      hsCode: m.hsCode || null,
+      createdById: userId,
+      importBatchId,
+    };
+  });
+
+  const shipperData: Prisma.ShipperDetailCreateManyInput[] = [];
+  const consigneeData: Prisma.ConsigneeDetailCreateManyInput[] = [];
+  const notifyData: Prisma.NotifyPartyDetailCreateManyInput[] = [];
+  const containerData: Prisma.ContainerDetailCreateManyInput[] = [];
+  validRows.forEach((row, i) => {
+    const m = row.mapped;
+    if (m.shipperName || m.shipperAddress) {
+      shipperData.push({ id: randomUUID(), jobId: jobIds[i], name: m.shipperName || null, address: m.shipperAddress || null });
+    }
+    if (m.consigneeName || m.consigneeAddress) {
+      consigneeData.push({ id: randomUUID(), jobId: jobIds[i], name: m.consigneeName || null, address: m.consigneeAddress || null });
+    }
+    if (m.notifyName) {
+      notifyData.push({ id: randomUUID(), jobId: jobIds[i], name: m.notifyName });
+    }
+    if (m.containerType || m.containerCount) {
+      containerData.push({
+        id: randomUUID(),
+        jobId: jobIds[i],
+        containerType: m.containerType || null,
+        count: toInt(m.containerCount) ?? 1,
+        sortOrder: 0,
+      });
+    }
+  });
+
+  await prisma.$transaction([
+    ...(jobsData.length > 0 ? [prisma.job.createMany({ data: jobsData })] : []),
+    ...(shipperData.length > 0 ? [prisma.shipperDetail.createMany({ data: shipperData })] : []),
+    ...(consigneeData.length > 0 ? [prisma.consigneeDetail.createMany({ data: consigneeData })] : []),
+    ...(notifyData.length > 0 ? [prisma.notifyPartyDetail.createMany({ data: notifyData })] : []),
+    ...(containerData.length > 0 ? [prisma.containerDetail.createMany({ data: containerData })] : []),
+    ...rowErrorInserts(importBatchId, invalidRows),
+  ]);
+
+  return { validRows: validRows.length, invalidRows: invalidRows.length };
+}
+
+function rowErrorInserts(
+  importBatchId: string,
+  invalidRows: { rowNumber: number; raw: Record<string, string>; errors: unknown }[],
+) {
+  if (invalidRows.length === 0) return [];
+  return [
+    prisma.importRowError.createMany({
+      data: invalidRows.map((row) => ({
+        importBatchId,
+        rowNumber: row.rowNumber,
+        rawData: row.raw,
+        errors: row.errors as unknown as Prisma.InputJsonValue,
+      })),
+    }),
+  ];
 }

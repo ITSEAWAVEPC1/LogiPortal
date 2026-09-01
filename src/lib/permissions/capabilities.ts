@@ -17,7 +17,8 @@ export type CapabilityScreen =
   | "dataImport"
   | "enquiries"
   | "billTypes"
-  | "quotations";
+  | "quotations"
+  | "jobs";
 
 const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = {
   ADMIN: {
@@ -30,22 +31,29 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     // Types can be added without a deploy, per the acceptance criteria.
     billTypes: ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "approve"],
+    jobs: ["view", "create", "edit", "approve"],
   },
   BRANCH_MANAGER: {
     customers: ["view", "edit"],
     branches: ["view"],
     enquiries: ["view", "edit", "approve"],
     quotations: ["view", "edit", "approve"],
+    // Section 4.2 "Jobs" row: Edit/Override + the final-review approval gate.
+    jobs: ["view", "edit", "approve"],
   },
   DOER: {
     customers: ["view", "create"],
     enquiries: ["view", "create", "edit"],
     quotations: ["view"],
+    // Section 4.2: "Create/Edit workflow steps" — the Doer owns Job creation
+    // and completion; the workflow-step engine itself lands in Stage 5.
+    jobs: ["view", "create", "edit"],
   },
   SALES: {
     customers: ["view", "create", "edit"],
     enquiries: ["view", "create", "edit"],
     quotations: ["view", "create", "edit"],
+    jobs: ["view"],
   },
   ACCOUNTS: {
     customers: ["view"],
@@ -54,6 +62,13 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     // Quotations the way Section 4.3 defines one for Jobs, so plain
     // view-only at the whole-quotation level is the correct-scope default.
     quotations: ["view"],
+    // Section 4.2: "View + edit billing sections". Whole-screen "edit" is
+    // granted so Accounts can reach the Job at all; the Section 4.3
+    // field-group gate (field-permissions.ts, resource "job") then confines
+    // their writes to charges / dutyPayment / documents — same "either
+    // whole-resource edit OR any section field-group EDIT" pattern as
+    // Customer Master v2 decision #3.
+    jobs: ["view", "edit"],
   },
   // "Own org only" / "Own quotations, view only" (Customer's real Section 4.2
   // right) needs User.organizationId, which doesn't exist until Stage 9 —

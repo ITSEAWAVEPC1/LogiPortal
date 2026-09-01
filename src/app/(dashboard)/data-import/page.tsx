@@ -11,6 +11,7 @@ export default async function DataImportPage() {
   if (!can(session.user.role, "dataImport", "create")) redirect("/dashboard");
 
   const batches = await prisma.importBatch.findMany({
+    where: { entityType: "CUSTOMER" },
     orderBy: { createdAt: "desc" },
     take: 50,
     include: { uploadedBy: { select: { name: true } } },
@@ -18,8 +19,8 @@ export default async function DataImportPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-semibold text-text-primary">Data Import</h1>
-      <ImportWizard />
+      <h1 className="mb-4 text-2xl font-semibold text-text-primary">Data Import — Customers</h1>
+      <ImportWizard entityType="CUSTOMER" />
       <BatchHistoryTable batches={batches} />
     </div>
   );

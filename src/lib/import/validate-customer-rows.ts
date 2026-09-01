@@ -2,25 +2,11 @@ import { prisma } from "@/lib/db/prisma";
 import { organizationInputSchema } from "@/lib/validation/organization";
 import { normalizeGst } from "@/lib/validation/kyc";
 import { CUSTOMER_TARGET_FIELDS } from "./column-matcher";
+import type { RowError, ValidatedRow, ValidationResult } from "./types";
 
-export interface RowError {
-  field: string;
-  message: string;
-}
-
-export interface ValidatedRow {
-  rowNumber: number;
-  raw: Record<string, string>;
-  mapped: Record<string, string>;
-  valid: boolean;
-  errors: RowError[];
-}
-
-export interface ValidationResult {
-  rows: ValidatedRow[];
-  validCount: number;
-  invalidCount: number;
-}
+// Re-exported so existing importers (ImportWizard, commit route) keep working
+// after the shapes moved to ./types for the Job validator to share.
+export type { RowError, ValidatedRow, ValidationResult } from "./types";
 
 /**
  * The one shared validator for Customer rows — used identically by the
