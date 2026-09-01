@@ -34,6 +34,14 @@ export default async function SettingsPage() {
               </p>
             </Card>
           </Link>
+          <Link href="/settings/workflow-templates">
+            <Card className="transition-colors hover:border-brand-teal">
+              <h2 className="text-sm font-semibold text-text-primary">Workflow Templates</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Correct the Import workflow step sequences (Ex-Works, FOB) without a code deploy.
+              </p>
+            </Card>
+          </Link>
         </div>
       </div>
     );

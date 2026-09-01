@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
+import { attachWorkflow } from "@/lib/workflow/engine";
 
 const reviewSchema = z.object({
   decision: z.enum(["approve", "needs_correction"]),
@@ -10,8 +11,9 @@ const reviewSchema = z.object({
 });
 
 // Branch Manager's final-review gate: PENDING_REVIEW -> WORKFLOW_IN_PROGRESS or
-// NEEDS_CORRECTION. Incoterm on the approved Job selects the Stage 5/6
-// workflow template.
+// NEEDS_CORRECTION. On approve, the Incoterm on the Job selects a Stage 5
+// workflow template and its steps are copied onto the Job (attachWorkflow) in
+// the same transaction — a non-EXW/FOB Import Job simply gets no steps.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,15 +36,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: `Cannot review a job with status ${job.status}` }, { status: 409 });
   }
 
-  const updated = await prisma.job.update({
-    where: { id },
-    data: {
-      status: parsed.data.decision === "approve" ? "WORKFLOW_IN_PROGRESS" : "NEEDS_CORRECTION",
-      reviewedById: session.user.id,
-      reviewedAt: new Date(),
-      reviewNote: parsed.data.note ?? null,
-    },
-  });
+  if (parsed.data.decision === "needs_correction") {
+    const updated = await prisma.job.update({
+      where: { id },
+      data: {
+        status: "NEEDS_CORRECTION",
+        reviewedById: session.user.id,
+        reviewedAt: new Date(),
+        reviewNote: parsed.data.note ?? null,
+      },
+    });
+    return NextResponse.json({ job: updated });
+  }
 
-  return NextResponse.json({ job: updated });
+  const { job: updated, workflow } = await prisma.$transaction(
+    async (tx) => {
+      const u = await tx.job.update({
+        where: { id },
+        data: {
+          status: "WORKFLOW_IN_PROGRESS",
+          reviewedById: session.user.id,
+          reviewedAt: new Date(),
+          reviewNote: parsed.data.note ?? null,
+        },
+      });
+      const attach = await attachWorkflow(
+        tx,
+        { id: u.id, shipmentType: u.shipmentType, incoterm: u.incoterm },
+        session.user.id,
+      );
+      return { job: u, workflow: attach };
+    },
+    { timeout: 20000, maxWait: 10000 },
+  );
+
+  return NextResponse.json({ job: updated, workflow });
 }

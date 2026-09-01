@@ -18,7 +18,8 @@ export type CapabilityScreen =
   | "enquiries"
   | "billTypes"
   | "quotations"
-  | "jobs";
+  | "jobs"
+  | "workflowTemplates";
 
 const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = {
   ADMIN: {
@@ -32,6 +33,11 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     billTypes: ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "approve"],
     jobs: ["view", "create", "edit", "approve"],
+    // Stage 5: the workflow-template admin screen — corrections without a
+    // code deploy (plan failover requirement). Admin-only; every other role
+    // has no key here. Step *actions* on a Job are gated separately by the
+    // per-step ownerRole/approverRole, not this capability.
+    workflowTemplates: ["view", "edit"],
   },
   BRANCH_MANAGER: {
     customers: ["view", "edit"],

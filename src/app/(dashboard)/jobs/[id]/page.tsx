@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { getJobFieldAccess, redactJobForRole } from "@/lib/permissions/job-fields";
 import { JobForm, type JobDetail } from "../_components/JobForm";
+import { WorkflowPanel } from "../_components/WorkflowPanel";
 
 interface JobDetailPageProps {
   params: Promise<{ id: string }>;
@@ -37,7 +38,14 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   // the client — mirrors the API GET route's redaction.
   const redacted = redactJobForRole(job, fieldAccess) as unknown as JobDetail;
 
-  return (
+  // Two-pane layout once the Job is in a workflow track (plan §2.2): the form
+  // on the left, the live step-tracker on the right. The panel self-fetches
+  // and enforces its own per-step permissions server-side.
+  const showWorkflow =
+    fieldAccess.workflowStatus !== "NONE" &&
+    (job.status === "WORKFLOW_IN_PROGRESS" || job.status === "COMPLETED");
+
+  const form = (
     <JobForm
       job={redacted}
       role={role}
@@ -45,5 +53,14 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
       canApprove={can(role, "jobs", "approve")}
       fieldAccess={fieldAccess}
     />
+  );
+
+  if (!showWorkflow) return form;
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,34rem)]">
+      <div>{form}</div>
+      <WorkflowPanel jobId={job.id} />
+    </div>
   );
 }

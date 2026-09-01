@@ -73,6 +73,11 @@ model User {
   createdJobs  Job[] @relation("JobCreatedBy")
   jobsReviewed Job[] @relation("JobReviewedBy")
 
+  // Stage 5 — workflow engine
+  workflowStepsCompleted JobWorkflowProgress[] @relation("WorkflowStepCompletedBy")
+  workflowStepsApproved  JobWorkflowProgress[] @relation("WorkflowStepApprovedBy")
+  jobAuditLogs           JobAuditLog[]         @relation("JobAuditActor")
+
   branchesAsSalesPerson         OrganizationBranch[]   @relation("BranchSalesPerson")
   branchesAsCollectionExecutive OrganizationBranch[]   @relation("BranchCollectionExecutive")
   branchAccountManagerFor       BranchAccountManager[] @relation("BranchAccountManagerUser")
@@ -951,6 +956,10 @@ model Job {
   notifyPartyDetail NotifyPartyDetail?
   containers        ContainerDetail[]
 
+  // Stage 5 — workflow engine
+  workflowProgress JobWorkflowProgress[]
+  auditLogs        JobAuditLog[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1038,4 +1047,133 @@ model ContainerDetail {
 
   @@index([jobId])
   @@map("container_details")
+}
+
+// ---------------------------------------------------------------------------
+// Stage 5 — Import Workflow Engine (Ex-Works & FOB tracks)
+//
+// A WorkflowTemplate is a data-defined step sequence keyed by
+// (shipmentType, incotermKey). When a Branch Manager approves a Job, the
+// matching template's active steps are copied into JobWorkflowProgress rows
+// (denormalized snapshot — later template edits don't touch in-flight Jobs).
+// Every step action appends a JobAuditLog row; the log is append-only (no
+// PATCH/DELETE route exists). Export tracks (CIF/DDP/DDU) are Stage 6 and
+// reuse these same models. See docs/stage-checklists/stage-5.md.
+// Additive only.
+// ---------------------------------------------------------------------------
+
+enum WorkflowStepStatus {
+  PENDING // not yet reachable / not started
+  IN_PROGRESS // current step, owner working on it
+  PENDING_APPROVAL // owner submitted a two-actor gate step, waiting on approverRole
+  COMPLETED
+  SKIPPED // reserved for Stage 6 "if required" steps; unused by the Import tracks
+}
+
+model WorkflowTemplate {
+  id           String       @id @default(cuid())
+  name         String // "Import — Ex-Works", "Import — FOB"
+  shipmentType ShipmentType // IMPORT now; EXPORT added in Stage 6
+  // Uppercased Incoterm bucket matched against Job.incoterm ("EXW" | "FOB").
+  incotermKey  String
+  isActive     Boolean      @default(true)
+
+  steps       WorkflowStep[]
+  jobProgress JobWorkflowProgress[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shipmentType, incotermKey])
+  @@map("workflow_templates")
+}
+
+model WorkflowStep {
+  id         String           @id @default(cuid())
+  templateId String
+  template   WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  // Stable machine key ("etd_from_pol", "draft_hbl_approval", ...) — the
+  // JOB_WORKFLOW_STEP_FIELDS validation map and the engine key off this,
+  // never the label or sortOrder (both admin-editable).
+  stepKey   String
+  label     String
+  sortOrder Int
+
+  ownerRole      Role // who completes / enters this step
+  approverRole   Role? // set only for a two-actor gate (Draft HBL -> BRANCH_MANAGER)
+  isApprovalGate Boolean @default(false) // true iff approverRole set; drives UI emphasis
+  isActive       Boolean @default(true) // soft-deactivate; no hard delete (app convention)
+
+  progress JobWorkflowProgress[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([templateId, stepKey])
+  @@index([templateId])
+  @@map("workflow_steps")
+}
+
+model JobWorkflowProgress {
+  id    String @id @default(cuid())
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  templateId String
+  template   WorkflowTemplate @relation(fields: [templateId], references: [id])
+  stepId     String
+  step       WorkflowStep     @relation(fields: [stepId], references: [id])
+
+  // Denormalized snapshot of the step at attach time — an admin template
+  // edit afterward never mutates an in-flight Job's sequence.
+  stepKey   String
+  label     String
+  sortOrder Int
+
+  status WorkflowStepStatus @default(PENDING)
+  // Per-step captured fields (a single date, HBL No./Date, the 9 Freight
+  // Certificate figures, ...). Validated per stepKey by
+  // src/lib/validation/workflow.ts; opaque at the DB layer (like Job.charges).
+  data   Json?
+
+  completedById String?
+  completedBy   User?     @relation("WorkflowStepCompletedBy", fields: [completedById], references: [id])
+  completedAt   DateTime?
+  approvedById  String?
+  approvedBy    User?     @relation("WorkflowStepApprovedBy", fields: [approvedById], references: [id])
+  approvedAt    DateTime?
+  reviewNote    String? // gate-rejection reason
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([jobId, stepId])
+  @@index([jobId])
+  @@map("job_workflow_progress")
+}
+
+// Append-only. No updatedAt, and no PATCH/DELETE route anywhere in the app.
+// Stage 5 writes workflow-step transitions + job.completed; Stage 10's audit
+// viewer reads it (and IntegrationSyncLog).
+model JobAuditLog {
+  id    String @id @default(cuid())
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  actorId String
+  actor   User   @relation("JobAuditActor", fields: [actorId], references: [id])
+
+  // "workflow.attached" | "workflow.step.submitted" | "workflow.step.completed"
+  // | "workflow.step.approved" | "workflow.step.rejected"
+  // | "workflow.step.reverted" | "job.completed"
+  action  String
+  stepKey String?
+  detail  Json? // { from, to, note, data } — free shape, like ImportRowError.errors
+
+  createdAt DateTime @default(now())
+
+  @@index([jobId])
+  @@index([createdAt])
+  @@map("job_audit_logs")
 }

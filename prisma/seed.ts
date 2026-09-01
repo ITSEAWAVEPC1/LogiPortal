@@ -2,6 +2,7 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient, type Role, type FieldAccessLevel } from "../src/generated/prisma/client";
+import { IMPORT_WORKFLOW_TEMPLATES } from "../src/lib/workflow/import-tracks";
 
 const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -185,6 +186,34 @@ async function main() {
       update: { name },
       create: { name, code },
     });
+  }
+
+  // Stage 5 — Import workflow templates (Ex-Works & FOB). Idempotent: the
+  // template upserts on (shipmentType, incotermKey) and each step on
+  // (templateId, stepKey), so a re-run refreshes labels/order/roles without
+  // duplicating rows or disturbing any in-flight JobWorkflowProgress.
+  console.log("Seeding workflow templates...");
+  for (const tpl of IMPORT_WORKFLOW_TEMPLATES) {
+    const template = await prisma.workflowTemplate.upsert({
+      where: { shipmentType_incotermKey: { shipmentType: tpl.shipmentType, incotermKey: tpl.incotermKey } },
+      update: { name: tpl.name },
+      create: { name: tpl.name, shipmentType: tpl.shipmentType, incotermKey: tpl.incotermKey },
+    });
+    for (let i = 0; i < tpl.steps.length; i++) {
+      const step = tpl.steps[i];
+      const data = {
+        label: step.label,
+        sortOrder: i,
+        ownerRole: step.ownerRole,
+        approverRole: step.approverRole ?? null,
+        isApprovalGate: Boolean(step.approverRole),
+      };
+      await prisma.workflowStep.upsert({
+        where: { templateId_stepKey: { templateId: template.id, stepKey: step.stepKey } },
+        update: data,
+        create: { templateId: template.id, stepKey: step.stepKey, ...data },
+      });
+    }
   }
 
   console.log("Done. Test users (password: %s):", TEST_PASSWORD);
