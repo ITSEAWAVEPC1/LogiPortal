@@ -18,5 +18,12 @@ export default function proxy(...args: Parameters<typeof auth>) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|design-system).*)"],
+  // Negative-lookahead keeps the auth gate OFF of: API routes, Next internals,
+  // the public design-system page, and any static asset file (matched by
+  // extension). Without the extension exclusion an unauthenticated request for
+  // a file in public/ — e.g. the logo on /login — is redirected to /login and
+  // the browser renders it as a broken image.
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|design-system|.*\\.(?:png|jpg|jpeg|gif|svg|webp|avif|ico|bmp|css|js|woff|woff2|ttf|eot)$).*)",
+  ],
 };

@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Seawave Platform",
   description: "Seawave Forwarding & Logistics — freight forwarding operations platform",
+  icons: {
+    icon: "/brand/seawave_motif.png",
+    shortcut: "/brand/seawave_motif.png",
+    apple: "/brand/seawave_motif.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
