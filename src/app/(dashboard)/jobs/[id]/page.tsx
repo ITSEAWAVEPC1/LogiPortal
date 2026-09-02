@@ -5,6 +5,7 @@ import { can } from "@/lib/permissions/capabilities";
 import { getJobFieldAccess, redactJobForRole } from "@/lib/permissions/job-fields";
 import { JobForm, type JobDetail } from "../_components/JobForm";
 import { WorkflowPanel } from "../_components/WorkflowPanel";
+import { DocumentsPanel } from "../_components/DocumentsPanel";
 
 interface JobDetailPageProps {
   params: Promise<{ id: string }>;
@@ -55,12 +56,36 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     />
   );
 
-  if (!showWorkflow) return form;
+  // Documents (Stage 7): shown once the Job is past DRAFT, for any role with
+  // documents field-group access + the documents capability. Full-width below
+  // the form / workflow grid.
+  const showDocuments =
+    fieldAccess.documents !== "NONE" &&
+    can(role, "documents", "view") &&
+    job.status !== "DRAFT" &&
+    job.status !== "PENDING_REVIEW" &&
+    job.status !== "NEEDS_CORRECTION";
+
+  const documents = showDocuments ? (
+    <DocumentsPanel jobId={job.id} viewerRole={role} viewerId={session.user.id} />
+  ) : null;
+
+  if (!showWorkflow) {
+    return (
+      <div className="flex flex-col gap-6">
+        {form}
+        {documents}
+      </div>
+    );
+  }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,34rem)]">
-      <div>{form}</div>
-      <WorkflowPanel jobId={job.id} />
+    <div className="flex flex-col gap-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,34rem)]">
+        <div>{form}</div>
+        <WorkflowPanel jobId={job.id} />
+      </div>
+      {documents}
     </div>
   );
 }

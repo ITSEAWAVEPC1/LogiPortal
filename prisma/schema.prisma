@@ -58,6 +58,13 @@ model User {
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id])
 
+  // Stage 7 — minimal additive down-payment on Stage 9's Customer row-scoping.
+  // Nullable, no default. Only CUSTOMER users are ever linked, and only the
+  // document-repository queries read it so far; Stage 9 promotes this into the
+  // session and scopes Jobs/Quotations/Enquiries by it too.
+  organizationId String?
+  organization   Organization? @relation("OrganizationUsers", fields: [organizationId], references: [id])
+
   sessions             Session[]
   createdOrganizations Organization[] @relation("OrganizationCreatedBy")
   importBatches        ImportBatch[]
@@ -77,6 +84,11 @@ model User {
   workflowStepsCompleted JobWorkflowProgress[] @relation("WorkflowStepCompletedBy")
   workflowStepsApproved  JobWorkflowProgress[] @relation("WorkflowStepApprovedBy")
   jobAuditLogs           JobAuditLog[]         @relation("JobAuditActor")
+
+  // Stage 7 — documents
+  documentsCreated        Document[]        @relation("DocumentCreatedBy")
+  documentsApproved       Document[]        @relation("DocumentApprovedBy")
+  documentVersionsCreated DocumentVersion[] @relation("DocumentVersionCreatedBy")
 
   branchesAsSalesPerson         OrganizationBranch[]   @relation("BranchSalesPerson")
   branchesAsCollectionExecutive OrganizationBranch[]   @relation("BranchCollectionExecutive")
@@ -162,6 +174,10 @@ model Organization {
   enquiries  Enquiry[]
   quotations Quotation[]
   jobs       Job[]
+
+  // Stage 7 — CUSTOMER users linked to this org for the document repository
+  // read path (see User.organizationId).
+  users User[] @relation("OrganizationUsers")
 
   branches            OrganizationBranch[]
   customerAccountInfo CustomerAccountInfo?
@@ -974,6 +990,9 @@ model Job {
   workflowProgress JobWorkflowProgress[]
   auditLogs        JobAuditLog[]
 
+  // Stage 7 — generated + uploaded documents for this job
+  documents Document[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1164,6 +1183,11 @@ model JobWorkflowProgress {
   approvedAt    DateTime?
   reviewNote    String? // gate-rejection reason
 
+  // Stage 7 — documents optionally tied to the step that produces/needs them
+  // (e.g. the MBL Copy uploaded from the MBL Details step). Optional link only;
+  // the document and step state machines stay independent.
+  documents Document[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1195,4 +1219,144 @@ model JobAuditLog {
   @@index([jobId])
   @@index([createdAt])
   @@map("job_audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Stage 7 — Document Generation & Management
+//
+// Five generated document kinds (HBL, MBL, Freight Certificate, Delivery
+// Order, Invoice) plus free-form uploads, each tied to a Job, permission-
+// scoped per plan §4.3, versioned, and regenerable from a retained
+// sourceSnapshot. File bytes live in DocumentVersion.bytes (Postgres) behind
+// src/lib/pdf/document-storage.ts so a later swap to Vercel Blob is a
+// one-file change. Generation is synchronous with a 3-attempt retry loop
+// (no queue infra yet); a failed render falls back to an HTML preview, same
+// as the Stage 3 Quotation PDF. Additive only.
+// See docs/stage-checklists/stage-7.md.
+// ---------------------------------------------------------------------------
+
+enum DocumentKind {
+  HBL
+  MBL
+  FREIGHT_CERTIFICATE
+  DELIVERY_ORDER
+  INVOICE
+  OTHER // free-form uploaded document (Packing List, Certificate of Origin, ...)
+}
+
+enum DocumentOrigin {
+  GENERATED // produced by the PDF engine from Job data
+  UPLOADED // a file a user uploaded
+}
+
+enum DocumentStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum DocumentGenerationStatus {
+  NOT_APPLICABLE // uploaded documents
+  SUCCEEDED
+  FAILED // all 3 render attempts failed — client renders the HTML fallback
+}
+
+// Seeded lookup (BillType twin). The 5 built-ins are isGeneratable; an admin
+// can add upload-only categories at /settings/document-types, always
+// kind = OTHER + isGeneratable = false.
+model DocumentType {
+  id                     String       @id @default(cuid())
+  code                   String       @unique // stable dispatch key: "HBL", "MBL", ...
+  name                   String
+  kind                   DocumentKind
+  isFinancial            Boolean      @default(false) // INVOICE + FREIGHT_CERTIFICATE — hidden from SALES
+  isGeneratable          Boolean      @default(false) // has a PDF template
+  customerVisibleDefault Boolean      @default(false)
+  isActive               Boolean      @default(true)
+  sortOrder              Int          @default(0)
+
+  documents Document[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("document_types")
+}
+
+model Document {
+  id             String   @id @default(cuid())
+  // Numeric part of the human-facing reference (DOC-{year}-{sequenceNumber,
+  // padded}) — same global-autoincrement pattern as Job/Quotation.
+  sequenceNumber Int      @default(autoincrement())
+
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  documentTypeId String
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id])
+
+  kind        DocumentKind // denormalized from the type for easy filtering
+  origin      DocumentOrigin
+  title       String
+  isFinancial Boolean        @default(false) // frozen from the type at create time
+
+  status             DocumentStatus @default(DRAFT)
+  sharedWithCustomer Boolean        @default(false) // only APPROVED + shared docs reach a CUSTOMER
+  isActive           Boolean        @default(true) // soft delete (no DELETE verb anywhere)
+
+  // Optional tie to the workflow step that produced/needs this document.
+  jobWorkflowProgressId String?
+  jobWorkflowProgress   JobWorkflowProgress? @relation(fields: [jobWorkflowProgressId], references: [id])
+
+  // Points at the DocumentVersion currently in effect — regeneration / a new
+  // upload clones into currentVersionNumber + 1 rather than mutating history
+  // (mirrors Quotation.currentVersionNumber).
+  currentVersionNumber Int               @default(1)
+  versions             DocumentVersion[]
+
+  createdById String
+  createdBy   User   @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+
+  approvedById String?
+  approvedBy   User?     @relation("DocumentApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  reviewNote   String? // rejection reason
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([jobId])
+  @@index([kind])
+  @@index([status])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id         String @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+
+  fileName    String
+  contentType String @default("application/pdf")
+  byteSize    Int
+  bytes       Bytes? // the file itself; null when a GENERATED version failed all attempts
+
+  // GENERATED versions: the exact Job data used, kept for safe regeneration
+  // (plan's "source-data snapshot retained per document"). Opaque JSON, like
+  // Job.charges / JobWorkflowProgress.data.
+  sourceSnapshot     Json?
+  generationStatus   DocumentGenerationStatus @default(NOT_APPLICABLE)
+  generationError    String?
+  generationAttempts Int                      @default(0)
+
+  createdById String
+  createdBy   User   @relation("DocumentVersionCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId])
+  @@map("document_versions")
 }

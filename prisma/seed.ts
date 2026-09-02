@@ -118,6 +118,28 @@ function billTypeCode(name: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+// Stage 7 — Document Type master (BillType twin). The 5 built-ins are
+// isGeneratable and map 1:1 to a React-PDF template keyed on `code`; INVOICE +
+// FREIGHT_CERTIFICATE are financial (hidden from Sales). The OTHER row is the
+// catch-all for uploaded documents; an admin can add more upload-only
+// categories at /settings/document-types.
+const DOCUMENT_TYPES: {
+  code: string;
+  name: string;
+  kind: "HBL" | "MBL" | "FREIGHT_CERTIFICATE" | "DELIVERY_ORDER" | "INVOICE" | "OTHER";
+  isFinancial: boolean;
+  isGeneratable: boolean;
+  customerVisibleDefault: boolean;
+  sortOrder: number;
+}[] = [
+  { code: "HBL", name: "House Bill of Lading", kind: "HBL", isFinancial: false, isGeneratable: true, customerVisibleDefault: true, sortOrder: 1 },
+  { code: "MBL", name: "Master Bill of Lading", kind: "MBL", isFinancial: false, isGeneratable: true, customerVisibleDefault: false, sortOrder: 2 },
+  { code: "FREIGHT_CERTIFICATE", name: "Freight Certificate", kind: "FREIGHT_CERTIFICATE", isFinancial: true, isGeneratable: true, customerVisibleDefault: false, sortOrder: 3 },
+  { code: "DELIVERY_ORDER", name: "Delivery Order", kind: "DELIVERY_ORDER", isFinancial: false, isGeneratable: true, customerVisibleDefault: true, sortOrder: 4 },
+  { code: "INVOICE", name: "Invoice", kind: "INVOICE", isFinancial: true, isGeneratable: true, customerVisibleDefault: true, sortOrder: 5 },
+  { code: "OTHER", name: "General / Uploaded Document", kind: "OTHER", isFinancial: false, isGeneratable: false, customerVisibleDefault: false, sortOrder: 99 },
+];
+
 // Customer Master v2 field groups for the "organization" resource. Account
 // Info/Billing are Accounts-editable (Sales view-only on these financial
 // fields); Branches/Addresses/Contacts mirror the Doer/Branch Manager edit
@@ -191,6 +213,16 @@ async function main() {
       where: { code },
       update: { name },
       create: { name, code },
+    });
+  }
+
+  console.log("Seeding document types...");
+  for (const dt of DOCUMENT_TYPES) {
+    const { code, ...rest } = dt;
+    await prisma.documentType.upsert({
+      where: { code },
+      update: rest,
+      create: { code, ...rest },
     });
   }
 

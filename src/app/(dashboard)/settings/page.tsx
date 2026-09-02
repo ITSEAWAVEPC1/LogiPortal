@@ -42,6 +42,14 @@ export default async function SettingsPage() {
               </p>
             </Card>
           </Link>
+          <Link href="/settings/document-types">
+            <Card className="transition-colors hover:border-brand-teal">
+              <h2 className="text-sm font-semibold text-text-primary">Document Types</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Manage the document category master. Add upload-only types beyond the five generated documents.
+              </p>
+            </Card>
+          </Link>
         </div>
       </div>
     );

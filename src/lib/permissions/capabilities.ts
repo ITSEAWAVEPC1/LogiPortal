@@ -19,7 +19,9 @@ export type CapabilityScreen =
   | "billTypes"
   | "quotations"
   | "jobs"
-  | "workflowTemplates";
+  | "workflowTemplates"
+  | "documents"
+  | "documentTypes";
 
 const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = {
   ADMIN: {
@@ -38,6 +40,13 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     // has no key here. Step *actions* on a Job are gated separately by the
     // per-step ownerRole/approverRole, not this capability.
     workflowTemplates: ["view", "edit"],
+    // Stage 7 — document repository (§4.3 "Documents" row) + the Document Type
+    // master. Financial-doc visibility, upload-vs-approve, and the
+    // shared-with-customer rule are layered on top by
+    // src/lib/permissions/document-access.ts (same coarse-capability +
+    // nuance-layer split Stage 6 used for duty payment).
+    documents: ["view", "create", "edit", "approve", "delete"],
+    documentTypes: ["view", "create", "edit", "delete"],
   },
   BRANCH_MANAGER: {
     customers: ["view", "edit"],
@@ -46,6 +55,9 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     quotations: ["view", "edit", "approve"],
     // Section 4.2 "Jobs" row: Edit/Override + the final-review approval gate.
     jobs: ["view", "edit", "approve"],
+    // §4.3 Documents row: "Approve" — the Branch Manager reviews and shares
+    // documents but does not upload/generate them.
+    documents: ["view", "approve"],
   },
   DOER: {
     customers: ["view", "create"],
@@ -54,12 +66,18 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     // Section 4.2: "Create/Edit workflow steps" — the Doer owns Job creation
     // and completion; the workflow-step engine itself lands in Stage 5.
     jobs: ["view", "create", "edit"],
+    // §4.3 Documents row: "Upload" — non-financial documents only (the
+    // isFinancial guard lives in document-access.ts / the create route).
+    documents: ["view", "create"],
   },
   SALES: {
     customers: ["view", "create", "edit"],
     enquiries: ["view", "create", "edit"],
     quotations: ["view", "create", "edit"],
     jobs: ["view"],
+    // §4.3 Documents row: "View (non-financial docs)" — the isFinancial
+    // filter is applied by document-access.ts.
+    documents: ["view"],
   },
   ACCOUNTS: {
     customers: ["view"],
@@ -75,12 +93,18 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     // whole-resource edit OR any section field-group EDIT" pattern as
     // Customer Master v2 decision #3.
     jobs: ["view", "edit"],
+    // §4.3 Documents row: "Upload (invoices)" — Accounts is the role allowed
+    // to create financial documents.
+    documents: ["view", "create"],
   },
   // "Own org only" / "Own quotations, view only" (Customer's real Section 4.2
-  // right) needs User.organizationId, which doesn't exist until Stage 9 —
-  // see docs/stage-checklists/stage-1.md. No "enquiries"/"quotations" key at
-  // all here for Enquiries (No access); Quotations deferred the same way.
-  CUSTOMER: {},
+  // right) needs User.organizationId — Stage 7 adds that column and wires the
+  // document repository read path (APPROVED + sharedWithCustomer, org-scoped,
+  // enforced in document-access.ts). Enquiries/Quotations row-scoping is still
+  // Stage 9.
+  CUSTOMER: {
+    documents: ["view"],
+  },
 };
 
 export function can(role: Role, screen: CapabilityScreen, action: Action): boolean {

@@ -35,6 +35,23 @@ function fmtDateTime(iso: string | null) {
   return new Date(iso).toLocaleString();
 }
 
+// Steps whose output is (or is backed by) a document — the Documents section
+// on the same page is where the HBL/MBL/DO/Freight Certificate/Invoice for
+// this job is generated, uploaded, and approved. Kept as a static hint (no
+// live count) — the document and workflow-step state machines are independent.
+const DOC_BEARING_STEP_KEYS = new Set([
+  "draft_hbl_approval",
+  "onboard_hbl_details",
+  "mbl_details",
+  "freight_certificate_prep",
+  "bill_preparation",
+  "delivery_order_release",
+  "export_bl_type",
+  "export_bl_release",
+  "export_bill_preparation",
+  "export_do_and_delivery",
+]);
+
 // Parent passes key={step.id} so field state resets on selection change
 // (no set-state-in-effect).
 export function StepDetailCard({ step, viewerRole, busy, onAction }: StepDetailCardProps) {
@@ -123,6 +140,16 @@ export function StepDetailCard({ step, viewerRole, busy, onAction }: StepDetailC
           ),
         )}
       </div>
+
+      {DOC_BEARING_STEP_KEYS.has(step.stepKey) && (
+        <p className="mt-3 text-xs text-text-secondary">
+          📎 Generate or upload the related document in the{" "}
+          <a href="#job-documents" className="underline">
+            Documents
+          </a>{" "}
+          section below.
+        </p>
+      )}
 
       {(step.completedAt || step.approvedAt) && (
         <p className="mt-3 text-xs text-text-tertiary">
