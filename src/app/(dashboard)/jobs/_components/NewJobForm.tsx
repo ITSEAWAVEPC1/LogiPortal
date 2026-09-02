@@ -14,6 +14,7 @@ interface Branch {
 interface ConvertedQuotation {
   id: string;
   sequenceNumber: number;
+  referenceNo: string | null;
   createdAt: string;
   organization: { id: string; name: string };
   _count: { enquiries: number };
@@ -27,9 +28,15 @@ interface FromQuotationRow {
   jobId: string | null;
 }
 
-export function NewJobForm({ branches }: { branches: Branch[] }) {
+export function NewJobForm({
+  branches,
+  defaultShipmentType,
+}: {
+  branches: Branch[];
+  defaultShipmentType?: "IMPORT" | "EXPORT";
+}) {
   const router = useRouter();
-  const [mode, setMode] = useState<"quotation" | "direct">("quotation");
+  const [mode, setMode] = useState<"quotation" | "direct">(defaultShipmentType ? "direct" : "quotation");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -42,7 +49,7 @@ export function NewJobForm({ branches }: { branches: Branch[] }) {
   // --- Direct ---
   const [branchId, setBranchId] = useState("");
   const [customer, setCustomer] = useState<CustomerOption | null>(null);
-  const [shipmentType, setShipmentType] = useState("");
+  const [shipmentType, setShipmentType] = useState<string>(defaultShipmentType ?? "");
 
   useEffect(() => {
     fetch("/api/quotations?status=CONVERTED")
@@ -160,7 +167,7 @@ export function NewJobForm({ branches }: { branches: Branch[] }) {
             onChange={(e) => selectQuotation(e.target.value)}
             options={quotations.map((q) => ({
               value: q.id,
-              label: `${formatQuotationRef(q.createdAt, q.sequenceNumber)} — ${q.organization.name} (${q._count.enquiries})`,
+              label: `${formatQuotationRef(q)} — ${q.organization.name} (${q._count.enquiries})`,
             }))}
           />
 

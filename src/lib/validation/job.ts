@@ -32,9 +32,17 @@ export const JOB_STATUS_OPTIONS = [
 
 export type JobStatusValue = (typeof JOB_STATUS_OPTIONS)[number]["value"];
 
-export function formatJobRef(createdAt: string | Date, sequenceNumber: number): string {
-  const year = new Date(createdAt).getFullYear();
-  return `JOB-${year}-${String(sequenceNumber).padStart(4, "0")}`;
+// Unified reference: prefer the stored RFQ-DDMMYY-NNNN string (inherited from the
+// originating Enquiry, or freshly minted for direct / imported jobs); fall back
+// to the legacy computed JOB-YYYY-NNNN for rows created before the backfill.
+export function formatJobRef(row: {
+  referenceNo?: string | null;
+  createdAt: string | Date;
+  sequenceNumber: number;
+}): string {
+  if (row.referenceNo) return row.referenceNo;
+  const year = new Date(row.createdAt).getFullYear();
+  return `JOB-${year}-${String(row.sequenceNumber).padStart(4, "0")}`;
 }
 
 const num = z.number().nullable().optional();

@@ -10,6 +10,7 @@ import { ReviewModal } from "./ReviewModal";
 interface EnquiryRow {
   id: string;
   sequenceNumber: number;
+  referenceNo: string | null;
   status: "DRAFT" | "OPEN" | "READY_FOR_QUOTATION" | "NEEDS_CORRECTION";
   createdAt: string | Date;
   organization: { id: string; name: string };
@@ -147,7 +148,7 @@ export function EnquiryList({ enquiries, branches, initialQuery, canCreate, canA
             header: "Reference",
             render: (row) => (
               <Link href={`/enquiries/${row.id}`} className="font-medium text-brand-teal hover:underline">
-                {formatEnquiryRef(row.createdAt, row.sequenceNumber)}
+                {formatEnquiryRef(row)}
               </Link>
             ),
           },

@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { createQuotationSchema } from "@/lib/validation/quotation";
+import { formatEnquiryRef } from "@/lib/validation/enquiry";
+import { allocateRfqReference, inheritRfqReference } from "@/lib/reference/generate-reference";
 import type { Prisma } from "@/generated/prisma/client";
 
 const STATUS_VALUES = [
@@ -113,8 +115,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Unified reference: reuse the primary (earliest-created) bundled enquiry's
+  // RFQ number verbatim; record the other bundled enquiry refs in
+  // sourceReference. A pre-backfill enquiry with no referenceNo yet falls back
+  // to a fresh mint so the quotation is never left without a reference.
+  const primary = [...enquiries].sort(
+    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+  )[0];
+  const sourceReference =
+    enquiries
+      .filter((e) => e.id !== primary.id)
+      .map((e) => e.referenceNo ?? formatEnquiryRef(e))
+      .sort()
+      .join(", ") || null;
+
   const quotation = await prisma.$transaction(
     async (tx) => {
+      const ref = inheritRfqReference(primary) ?? (await allocateRfqReference(tx));
       const created = await tx.quotation.create({
         data: {
           organizationId,
@@ -122,6 +139,10 @@ export async function POST(request: NextRequest) {
           createdById: session.user.id,
           status: "DRAFT",
           currentVersionNumber: 1,
+          referenceNo: ref.referenceNo,
+          refYear: ref.refYear,
+          refSequence: ref.refSequence,
+          sourceReference,
           enquiries: { create: enquiryIds.map((enquiryId) => ({ enquiryId })) },
           versions: {
             create: {

@@ -38,6 +38,7 @@ const LINE_ITEMS_LOCKED_STATUSES: QuotationStatus[] = ["PENDING_APPROVAL", "CONV
 interface EnquirySummary {
   id: string;
   sequenceNumber: number;
+  referenceNo: string | null;
   createdAt: string | Date;
   shipmentType: string | null;
   serviceTypes: string[];
@@ -58,6 +59,8 @@ interface QuotationDetailProps {
   quotation: {
     id: string;
     sequenceNumber: number;
+    referenceNo: string | null;
+    sourceReference: string | null;
     status: QuotationStatus;
     createdAt: string | Date;
     currentVersionNumber: number;
@@ -148,11 +151,10 @@ export function QuotationDetail({ quotation, currentVersion, lineItems, canEdit,
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">
-            {formatQuotationRef(quotation.createdAt, quotation.sequenceNumber)}
-          </h1>
+          <h1 className="text-2xl font-semibold text-text-primary">{formatQuotationRef(quotation)}</h1>
           <p className="text-sm text-text-secondary">
             {quotation.organization.name} · {quotation.branch.name} · Version {quotation.currentVersionNumber}
+            {quotation.sourceReference && ` · also covers ${quotation.sourceReference}`}
           </p>
         </div>
         <Badge variant={STATUS_BADGE_VARIANT[quotation.status]}>{quotation.status.replace(/_/g, " ")}</Badge>
@@ -165,7 +167,7 @@ export function QuotationDetail({ quotation, currentVersion, lineItems, canEdit,
         <ul className="text-sm text-text-primary">
           {quotation.enquiries.map((qe) => (
             <li key={qe.id}>
-              {formatEnquiryRef(qe.enquiry.createdAt, qe.enquiry.sequenceNumber)} — {qe.enquiry.shipmentType ?? "—"} (
+              {formatEnquiryRef(qe.enquiry)} — {qe.enquiry.shipmentType ?? "—"} (
               {qe.enquiry.serviceTypes.join(", ") || "—"})
             </li>
           ))}

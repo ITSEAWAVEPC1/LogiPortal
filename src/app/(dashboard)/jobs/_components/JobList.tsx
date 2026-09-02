@@ -12,6 +12,7 @@ type JobStatus = (typeof JOB_STATUS_OPTIONS)[number]["value"];
 interface JobRow {
   id: string;
   sequenceNumber: number;
+  referenceNo: string | null;
   status: JobStatus;
   origin: "QUOTATION" | "DIRECT" | "IMPORTED";
   shipmentType: "IMPORT" | "EXPORT";
@@ -39,6 +40,12 @@ interface JobListProps {
 }
 
 const STATUS_TABS = JOB_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+
+const DIRECTION_TABS = [
+  { value: "", label: "All" },
+  { value: "IMPORT", label: "Imports" },
+  { value: "EXPORT", label: "Exports" },
+] as const;
 
 const STATUS_BADGE_VARIANT: Record<JobStatus, "pending" | "active" | "success" | "danger" | "neutral"> = {
   DRAFT: "pending",
@@ -69,6 +76,8 @@ export function JobList({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const directionScoped = initialQuery.shipmentType === "IMPORT" || initialQuery.shipmentType === "EXPORT";
+  const newJobHref = directionScoped ? `/jobs/new?shipmentType=${initialQuery.shipmentType}` : "/jobs/new";
 
   function updateQuery(next: Partial<{ status: string; branchId: string; shipmentType: string; q: string; page: string }>) {
     const merged = { ...initialQuery, q, page: "1", ...next };
@@ -113,7 +122,11 @@ export function JobList({
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-text-primary">Jobs</h1>
+        <h1 className="text-2xl font-semibold text-text-primary">
+          Freight Forwarding
+          {initialQuery.shipmentType === "IMPORT" && " — Imports"}
+          {initialQuery.shipmentType === "EXPORT" && " — Exports"}
+        </h1>
         <div className="flex gap-2">
           {canImport && (
             <Link href="/jobs/import">
@@ -121,11 +134,27 @@ export function JobList({
             </Link>
           )}
           {canCreate && (
-            <Link href="/jobs/new">
+            <Link href={newJobHref}>
               <Button>New Job</Button>
             </Link>
           )}
         </div>
+      </div>
+
+      <div className="mb-4 flex gap-1">
+        {DIRECTION_TABS.map((tab) => (
+          <button
+            key={tab.value || "ALL"}
+            onClick={() => updateQuery({ shipmentType: tab.value })}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+              initialQuery.shipmentType === tab.value
+                ? "bg-brand-teal/10 text-brand-teal"
+                : "text-text-secondary hover:bg-background hover:text-text-primary"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div className="mb-4 flex gap-2 overflow-x-auto border-b border-border-subtle">
@@ -160,16 +189,6 @@ export function JobList({
           options={branches.map((b) => ({ value: b.id, label: b.name }))}
           className="w-48"
         />
-        <Select
-          value={initialQuery.shipmentType}
-          onChange={(e) => updateQuery({ shipmentType: e.target.value })}
-          placeholder="All types"
-          options={[
-            { value: "IMPORT", label: "Import" },
-            { value: "EXPORT", label: "Export" },
-          ]}
-          className="w-40"
-        />
       </div>
 
       {actionError && <p className="mb-3 text-sm text-status-danger-fg">{actionError}</p>}
@@ -181,13 +200,16 @@ export function JobList({
             header: "Reference",
             render: (row) => (
               <Link href={`/jobs/${row.id}`} className="font-medium text-brand-teal hover:underline">
-                {formatJobRef(row.createdAt, row.sequenceNumber)}
+                {formatJobRef(row)}
               </Link>
             ),
           },
           { key: "customer", header: "Customer", render: (row) => row.organization.name },
           { key: "branch", header: "Branch", render: (row) => row.branch.name },
-          { key: "shipmentType", header: "Type", render: (row) => row.shipmentType },
+          // Redundant once the list is scoped to one direction.
+          ...(directionScoped
+            ? []
+            : [{ key: "shipmentType", header: "Type", render: (row: JobRow) => row.shipmentType }]),
           { key: "createdBy", header: "Created by", render: (row) => row.createdBy.name },
           {
             key: "status",

@@ -130,6 +130,24 @@ model FieldPermission {
   @@map("field_permissions")
 }
 
+// Per-year monotonic counter for the unified RFQ reference number
+// (RFQ-DDMMYY-NNNN). Resets yearly because the row key includes the calendar
+// year. One logical scope ("RFQ") is shared by enquiries, quotations and jobs
+// so a freshly-minted number can never collide with one inherited down the
+// Enquiry -> Quotation -> Job spine. Read + incremented with a single upsert
+// inside the caller's $transaction — see src/lib/reference/generate-reference.ts.
+model ReferenceCounter {
+  id        String   @id @default(cuid())
+  scope     String // "RFQ" — kept as a column so a second series can be added later
+  year      Int
+  lastValue Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([scope, year])
+  @@map("reference_counters")
+}
+
 // ---------------------------------------------------------------------------
 // Stage 1 — Master Data + Bulk Import Wizard
 // ---------------------------------------------------------------------------
@@ -310,10 +328,18 @@ model Enquiry {
   id     String        @id @default(cuid())
   status EnquiryStatus @default(DRAFT)
 
-  // Numeric part of the human-facing reference (ENQ-{year}-{sequenceNumber,
+  // Numeric part of the LEGACY human-facing reference (ENQ-{year}-{sequenceNumber,
   // padded}). Global autoincrement, not reset per year — see
-  // docs/stage-checklists/stage-2.md for the tradeoff.
+  // docs/stage-checklists/stage-2.md for the tradeoff. Kept as the display
+  // fallback when referenceNo is null (pre-backfill rows).
   sequenceNumber Int @default(autoincrement())
+
+  // Unified reference RFQ-DDMMYY-NNNN, minted once here and reused verbatim by
+  // this enquiry's Quotation and Job. refYear/refSequence are the structured
+  // parts (NNNN is a per-year counter). Additive; nullable until backfilled.
+  referenceNo String? @unique
+  refYear     Int?
+  refSequence Int?
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
@@ -354,6 +380,7 @@ model Enquiry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([refYear, refSequence])
   @@index([branchId])
   @@index([organizationId])
   @@index([status])
@@ -740,9 +767,18 @@ enum QuotationChargeCategory {
 model Quotation {
   id             String          @id @default(cuid())
   status         QuotationStatus @default(DRAFT)
-  // Numeric part of the human-facing reference (QUO-{year}-{sequenceNumber,
+  // Numeric part of the LEGACY human-facing reference (QUO-{year}-{sequenceNumber,
   // padded}) — same global-autoincrement pattern as Enquiry.sequenceNumber.
+  // Kept as the display fallback when referenceNo is null.
   sequenceNumber Int             @default(autoincrement())
+
+  // Unified reference — inherited verbatim from the primary (earliest-created)
+  // bundled Enquiry's referenceNo; sourceReference records the other bundled
+  // enquiry refs. See src/lib/reference/generate-reference.ts.
+  referenceNo     String? @unique
+  refYear         Int?
+  refSequence     Int?
+  sourceReference String?
 
   // Denormalized from the attached Enquiries' Organization — enforced
   // same-org at create time so a Quotation always has one clear billing
@@ -785,6 +821,7 @@ model Quotation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([refYear, refSequence])
   @@index([branchId])
   @@index([organizationId])
   @@index([status])
@@ -906,9 +943,18 @@ model Job {
   status JobStatus @default(DRAFT)
   origin JobOrigin @default(QUOTATION)
 
-  // Numeric part of the human-facing reference (JOB-{year}-{sequenceNumber,
-  // padded}) — same global-autoincrement pattern as Enquiry/Quotation.
+  // Numeric part of the LEGACY human-facing reference (JOB-{year}-{sequenceNumber,
+  // padded}) — same global-autoincrement pattern as Enquiry/Quotation. Kept as
+  // the display fallback when referenceNo is null.
   sequenceNumber Int @default(autoincrement())
+
+  // Unified reference. origin=QUOTATION: inherited verbatim from the originating
+  // Enquiry's referenceNo (sourceReference = parent quotation ref). origin=DIRECT
+  // or IMPORTED: freshly minted from the shared RFQ counter, sourceReference null.
+  referenceNo     String? @unique
+  refYear         Int?
+  refSequence     Int?
+  sourceReference String?
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
@@ -996,6 +1042,7 @@ model Job {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([refYear, refSequence])
   @@index([branchId])
   @@index([organizationId])
   @@index([status])

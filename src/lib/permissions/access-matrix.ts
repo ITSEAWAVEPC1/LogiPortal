@@ -16,11 +16,29 @@ export type ScreenKey =
   | "dataImport"
   | "settings";
 
-export const NAV_ITEMS: { key: ScreenKey; label: string; href: string; builtInStage: number }[] = [
+export const NAV_ITEMS: {
+  key: ScreenKey;
+  label: string;
+  href: string;
+  builtInStage: number;
+  // Optional sub-links rendered as an expandable group. Children point at the
+  // same screen with a query param (not a new route) so screen-access checks,
+  // page guards and existing links are untouched.
+  children?: { label: string; href: string }[];
+}[] = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", builtInStage: 10 },
   { key: "enquiries", label: "Enquiries", href: "/enquiries", builtInStage: 2 },
   { key: "quotations", label: "Quotations", href: "/quotations", builtInStage: 3 },
-  { key: "jobs", label: "Jobs", href: "/jobs", builtInStage: 4 },
+  {
+    key: "jobs",
+    label: "Freight Forwarding",
+    href: "/jobs",
+    builtInStage: 4,
+    children: [
+      { label: "Imports", href: "/jobs?shipmentType=IMPORT" },
+      { label: "Exports", href: "/jobs?shipmentType=EXPORT" },
+    ],
+  },
   { key: "customers", label: "Customers", href: "/customers", builtInStage: 1 },
   { key: "documents", label: "Documents", href: "/documents", builtInStage: 7 },
   { key: "reports", label: "Reports", href: "/reports", builtInStage: 10 },

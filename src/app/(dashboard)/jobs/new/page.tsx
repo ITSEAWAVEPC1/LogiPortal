@@ -4,7 +4,11 @@ import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { NewJobForm } from "../_components/NewJobForm";
 
-export default async function NewJobPage() {
+interface NewJobPageProps {
+  searchParams: Promise<{ shipmentType?: string }>;
+}
+
+export default async function NewJobPage({ searchParams }: NewJobPageProps) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user.role, "jobs", "create")) redirect("/jobs");
@@ -15,10 +19,13 @@ export default async function NewJobPage() {
     select: { id: true, name: true },
   });
 
+  const { shipmentType } = await searchParams;
+  const defaultShipmentType = shipmentType === "IMPORT" || shipmentType === "EXPORT" ? shipmentType : undefined;
+
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-4 text-2xl font-semibold text-text-primary">New Job</h1>
-      <NewJobForm branches={branches} />
+      <NewJobForm branches={branches} defaultShipmentType={defaultShipmentType} />
     </div>
   );
 }

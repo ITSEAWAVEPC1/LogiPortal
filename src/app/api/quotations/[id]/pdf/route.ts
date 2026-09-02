@@ -25,7 +25,20 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       organization: { select: { name: true, city: true, state: true } },
       branch: { select: { name: true } },
       createdBy: { select: { name: true } },
-      enquiries: { include: { enquiry: { select: { id: true, createdAt: true, sequenceNumber: true, shipmentType: true, serviceTypes: true } } } },
+      enquiries: {
+        include: {
+          enquiry: {
+            select: {
+              id: true,
+              createdAt: true,
+              sequenceNumber: true,
+              referenceNo: true,
+              shipmentType: true,
+              serviceTypes: true,
+            },
+          },
+        },
+      },
     },
   });
   if (!quotation) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -42,7 +55,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
   const data: QuotationPdfData = {
     id: quotation.id,
-    ref: formatQuotationRef(quotation.createdAt, quotation.sequenceNumber),
+    ref: formatQuotationRef(quotation),
     status: quotation.status,
     organizationName: quotation.organization.name,
     organizationCity: quotation.organization.city,
@@ -56,7 +69,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     approvedAt: currentVersion?.approvedAt?.toISOString() ?? null,
     enquiries: quotation.enquiries.map((qe) => ({
       id: qe.enquiry.id,
-      ref: formatEnquiryRef(qe.enquiry.createdAt, qe.enquiry.sequenceNumber),
+      ref: formatEnquiryRef(qe.enquiry),
       shipmentType: qe.enquiry.shipmentType,
       serviceTypes: qe.enquiry.serviceTypes,
     })),

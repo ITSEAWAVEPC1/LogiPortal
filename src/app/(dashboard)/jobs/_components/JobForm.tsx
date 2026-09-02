@@ -50,6 +50,8 @@ interface RawCharge {
 export interface JobDetail {
   id: string;
   sequenceNumber: number;
+  referenceNo: string | null;
+  sourceReference: string | null;
   status: JobStatus;
   origin: "QUOTATION" | "DIRECT" | "IMPORTED";
   createdAt: string | Date;
@@ -249,7 +251,7 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
   const canGroup = (g: JobFieldGroup) => fieldAccess[g] !== "NONE";
   const groupDisabled = (g: JobFieldGroup) => !editable || fieldAccess[g] !== "EDIT";
 
-  const reference = useMemo(() => formatJobRef(job.createdAt, job.sequenceNumber), [job]);
+  const reference = useMemo(() => formatJobRef(job), [job]);
 
   async function saveDraft(value: FormState) {
     const res = await fetch(`/api/jobs/${job.id}`, {
@@ -321,6 +323,17 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
   const partiesDisabled = groupDisabled("shipperConsigneeNotify");
   const chargeTotal = (job.charges ?? []).reduce((s, c) => s + (c.amount ?? 0), 0);
 
+  // Direction-specific detail sections. Import surfaces Agent/CFS + duty
+  // clearance; Export surfaces the stuffing track. Each section stays visible
+  // for the other direction only if it already holds data (bulk-imported or
+  // mis-directioned jobs), so nothing populated is ever hidden.
+  const isImport = job.shipmentType === "IMPORT";
+  const isExport = job.shipmentType === "EXPORT";
+  const hasDutyData = !!(form.dutyPaymentLiability || form.dutyAmount || form.dutyPaidBy);
+  const showImportClearance = isImport || !!form.agentDetails || !!form.cfsName;
+  const showDutyPayment =
+    canGroup("dutyPayment") && (isImport || ["DDP", "DDU"].includes(form.incoterm) || hasDutyData);
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex items-center justify-between">
@@ -328,7 +341,8 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
           <h1 className="text-2xl font-semibold text-text-primary">{reference}</h1>
           <p className="text-sm text-text-secondary">
             {job.organization.name} · {job.branch.name} · {job.shipmentType}
-            {job.quotationEnquiry && " · from quotation"}
+            {job.sourceReference && job.sourceReference !== job.referenceNo && ` · from ${job.sourceReference}`}
+            {job.origin === "QUOTATION" && job.sourceReference === job.referenceNo && " · from quotation"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -362,18 +376,6 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
               options={INCOTERM_OPTIONS}
               disabled={routingDisabled}
             />
-            {job.shipmentType === "EXPORT" && (
-              <Select
-                label="Export Stuffing Type"
-                placeholder="Select..."
-                value={form.exportStuffingType}
-                onChange={(e) => set("exportStuffingType", e.target.value)}
-                options={EXPORT_STUFFING_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                disabled={routingDisabled || !form.serviceTypes.includes("TRANSPORTATION")}
-              />
-            )}
-            <Input label="Agent Details" value={form.agentDetails} onChange={(e) => set("agentDetails", e.target.value)} disabled={routingDisabled} />
-            <Input label="CFS Name" value={form.cfsName} onChange={(e) => set("cfsName", e.target.value)} disabled={routingDisabled} />
             <Input label="Place of Receipt" value={form.placeOfReceipt} onChange={(e) => set("placeOfReceipt", e.target.value)} disabled={routingDisabled} />
             <Input label="Port of Loading" value={form.portOfLoading} onChange={(e) => set("portOfLoading", e.target.value)} disabled={routingDisabled} />
             <Input label="Port of Discharge" value={form.portOfDischarge} onChange={(e) => set("portOfDischarge", e.target.value)} disabled={routingDisabled} />
@@ -390,6 +392,51 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
             />
           </div>
 
+          {showImportClearance && (
+            <>
+              <h2 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                Import Clearance
+              </h2>
+              <div className="grid grid-cols-3 gap-3">
+                <Input
+                  label="Agent Details"
+                  value={form.agentDetails}
+                  onChange={(e) => set("agentDetails", e.target.value)}
+                  disabled={routingDisabled}
+                />
+                <Input
+                  label="CFS Name"
+                  value={form.cfsName}
+                  onChange={(e) => set("cfsName", e.target.value)}
+                  disabled={routingDisabled}
+                />
+              </div>
+            </>
+          )}
+
+          {isExport && (
+            <>
+              <h2 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                Export Details
+              </h2>
+              <div className="grid grid-cols-3 gap-3">
+                <Select
+                  label="Export Stuffing Type"
+                  placeholder="Select..."
+                  value={form.exportStuffingType}
+                  onChange={(e) => set("exportStuffingType", e.target.value)}
+                  options={EXPORT_STUFFING_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  disabled={routingDisabled || !form.serviceTypes.includes("TRANSPORTATION")}
+                />
+              </div>
+              {!form.serviceTypes.includes("TRANSPORTATION") && (
+                <p className="mt-2 text-xs text-text-tertiary">
+                  Select Transportation below to choose a Dock or Factory Stuffing track.
+                </p>
+              )}
+            </>
+          )}
+
           <div className="mt-4">
             <span className="mb-1 block text-sm font-medium text-text-primary">Type of Services</span>
             <div className="flex flex-wrap gap-4">
@@ -403,11 +450,6 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
                 />
               ))}
             </div>
-            {job.shipmentType === "EXPORT" && !form.serviceTypes.includes("TRANSPORTATION") && (
-              <p className="mt-2 text-xs text-text-tertiary">
-                Select Transportation to choose a Dock or Factory Stuffing track.
-              </p>
-            )}
           </div>
 
           <h2 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wide text-text-secondary">Cargo</h2>
@@ -502,7 +544,7 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
         </Card>
       )}
 
-      {canGroup("dutyPayment") && (
+      {showDutyPayment && (
         <Card className="mb-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-secondary">Duty Payment</h2>
           <div className="grid grid-cols-3 gap-3">

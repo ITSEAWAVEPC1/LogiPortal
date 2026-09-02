@@ -60,6 +60,7 @@ interface TransportDetailRaw {
 export interface EnquiryDetail {
   id: string;
   sequenceNumber: number;
+  referenceNo: string | null;
   status: "DRAFT" | "OPEN" | "READY_FOR_QUOTATION" | "NEEDS_CORRECTION";
   branchId: string;
   branch: { id: string; name: string };
@@ -205,7 +206,7 @@ export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: En
 
   const { status: autosaveStatus } = useAutosave(form, saveDraft, { enabled: editable });
 
-  const reference = useMemo(() => formatEnquiryRef(enquiry.createdAt, enquiry.sequenceNumber), [enquiry]);
+  const reference = useMemo(() => formatEnquiryRef(enquiry), [enquiry]);
 
   function toggleServiceType(value: ServiceTypeValue) {
     setForm((prev) => ({

@@ -8,6 +8,7 @@ import { validateCustomerRows } from "@/lib/import/validate-customer-rows";
 import { validateJobRows } from "@/lib/import/validate-job-rows";
 import { normalizeGst, normalizePan, normalizeTan } from "@/lib/validation/kyc";
 import { parseImportNumber } from "@/lib/validation/job";
+import { allocateRfqReferenceBlock } from "@/lib/reference/generate-reference";
 import { Prisma } from "@/generated/prisma/client";
 
 interface CommitCounts {
@@ -133,6 +134,9 @@ async function commitJobRows(
   const invalidRows = validated.filter((r) => !r.valid);
 
   const jobIds = validRows.map(() => randomUUID());
+  // Imported jobs have no parent enquiry — reserve a contiguous block of fresh
+  // RFQ references in one round trip (no per-row counter work).
+  const refs = await prisma.$transaction((tx) => allocateRfqReferenceBlock(tx, validRows.length));
   const toInt = (v: string) => {
     const n = parseImportNumber(v);
     return n === null ? null : Math.round(n);
@@ -148,6 +152,10 @@ async function commitJobRows(
       branchId: r.branchId,
       organizationId: r.organizationId,
       shipmentType: r.shipmentType,
+      referenceNo: refs[i].referenceNo,
+      refYear: refs[i].refYear,
+      refSequence: refs[i].refSequence,
+      sourceReference: null,
       serviceTypes: r.serviceTypes as unknown as Prisma.JobCreateManyInput["serviceTypes"],
       incoterm: m.incoterm || null,
       agentDetails: m.agentDetails || null,

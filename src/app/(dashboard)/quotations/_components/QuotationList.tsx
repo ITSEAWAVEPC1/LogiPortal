@@ -19,6 +19,7 @@ type QuotationStatus =
 interface QuotationRow {
   id: string;
   sequenceNumber: number;
+  referenceNo: string | null;
   status: QuotationStatus;
   createdAt: string | Date;
   organization: { id: string; name: string };
@@ -164,7 +165,7 @@ export function QuotationList({ quotations, branches, initialQuery, canCreate, c
             header: "Reference",
             render: (row) => (
               <Link href={`/quotations/${row.id}`} className="font-medium text-brand-teal hover:underline">
-                {formatQuotationRef(row.createdAt, row.sequenceNumber)}
+                {formatQuotationRef(row)}
               </Link>
             ),
           },

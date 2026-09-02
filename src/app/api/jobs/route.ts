@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { createJobDirectSchema, createJobFromQuotationSchema } from "@/lib/validation/job";
+import { allocateRfqReference, inheritRfqReference } from "@/lib/reference/generate-reference";
 import type { Prisma } from "@/generated/prisma/client";
 
 const STATUS_VALUES = [
@@ -118,7 +119,11 @@ export async function POST(request: NextRequest) {
 
     const qe = await prisma.quotationEnquiry.findUnique({
       where: { id: parsed.data.quotationEnquiryId },
-      include: { job: { select: { id: true } }, quotation: { select: { status: true } } },
+      include: {
+        job: { select: { id: true } },
+        quotation: { select: { status: true, referenceNo: true } },
+        enquiry: { select: { referenceNo: true, refYear: true, refSequence: true } },
+      },
     });
     if (!qe) return NextResponse.json({ error: "Quotation enquiry not found" }, { status: 404 });
     if (qe.job) {
@@ -147,9 +152,13 @@ export async function POST(request: NextRequest) {
           ]
         : [];
 
+    // Unified reference: reuse the originating enquiry's RFQ number verbatim
+    // (sourceReference points back to the parent quotation). A pre-backfill
+    // enquiry with no referenceNo falls back to a fresh mint.
     const job = await prisma.$transaction(
-      async (tx) =>
-        tx.job.create({
+      async (tx) => {
+        const ref = inheritRfqReference(qe.enquiry) ?? (await allocateRfqReference(tx));
+        return tx.job.create({
           data: {
             origin: "QUOTATION",
             status: "DRAFT",
@@ -171,9 +180,14 @@ export async function POST(request: NextRequest) {
             quotedTotal: snap.quotation.totalAmount,
             createdById: session.user.id,
             quotationEnquiryId: parsed.data.quotationEnquiryId,
+            referenceNo: ref.referenceNo,
+            refYear: ref.refYear,
+            refSequence: ref.refSequence,
+            sourceReference: qe.quotation.referenceNo ?? null,
             containers: containerRows.length ? { create: containerRows } : undefined,
           },
-        }),
+        });
+      },
       { timeout: 20000, maxWait: 10000 },
     );
 
@@ -193,17 +207,27 @@ export async function POST(request: NextRequest) {
   if (!organization) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
   if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
 
-  const job = await prisma.job.create({
-    data: {
-      origin: "DIRECT",
-      status: "DRAFT",
-      branchId: parsed.data.branchId,
-      organizationId: parsed.data.organizationId,
-      shipmentType: parsed.data.shipmentType,
-      serviceTypes: parsed.data.serviceTypes as Prisma.JobCreateInput["serviceTypes"],
-      createdById: session.user.id,
+  // Direct create has no parent enquiry — mint a fresh RFQ number.
+  const job = await prisma.$transaction(
+    async (tx) => {
+      const ref = await allocateRfqReference(tx);
+      return tx.job.create({
+        data: {
+          origin: "DIRECT",
+          status: "DRAFT",
+          branchId: parsed.data.branchId,
+          organizationId: parsed.data.organizationId,
+          shipmentType: parsed.data.shipmentType,
+          serviceTypes: parsed.data.serviceTypes as Prisma.JobCreateInput["serviceTypes"],
+          createdById: session.user.id,
+          referenceNo: ref.referenceNo,
+          refYear: ref.refYear,
+          refSequence: ref.refSequence,
+        },
+      });
     },
-  });
+    { timeout: 20000, maxWait: 10000 },
+  );
 
   return NextResponse.json({ job }, { status: 201 });
 }

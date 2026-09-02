@@ -14,6 +14,7 @@ interface Branch {
 interface EnquiryOption {
   id: string;
   sequenceNumber: number;
+  referenceNo: string | null;
   createdAt: string;
   shipmentType: string | null;
   serviceTypes: string[];
@@ -114,7 +115,7 @@ export function NewQuotationForm({ branches }: NewQuotationFormProps) {
               {enquiries.map((enquiry) => (
                 <Checkbox
                   key={enquiry.id}
-                  label={`${formatEnquiryRef(enquiry.createdAt, enquiry.sequenceNumber)} — ${enquiry.branch.name} — ${
+                  label={`${formatEnquiryRef(enquiry)} — ${enquiry.branch.name} — ${
                     enquiry.shipmentType ?? "—"
                   } (${enquiry.serviceTypes.join(", ") || "—"})`}
                   checked={selectedIds.includes(enquiry.id)}

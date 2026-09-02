@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
+import { allocateRfqReference } from "@/lib/reference/generate-reference";
 import type { Prisma } from "@/generated/prisma/client";
 
 const createSchema = z.object({
@@ -76,17 +77,30 @@ export async function POST(request: NextRequest) {
 
   // "Doer Name" (source doc's literal field label) is always the session
   // user — never client-supplied — per the locked design decision.
-  const enquiry = await prisma.enquiry.create({
-    data: {
-      branchId: parsed.data.branchId,
-      organizationId: parsed.data.organizationId,
-      doerId: session.user.id,
-      contactPersonName: organization.contactPersonName,
-      contactPersonPhone: organization.contactPersonPhone,
-      contactPersonEmail: organization.contactPersonEmail,
-      status: "DRAFT",
+  //
+  // The unified RFQ-DDMMYY-NNNN reference is minted here, once, and then reused
+  // verbatim by this enquiry's Quotation and Job. allocateRfqReference must run
+  // inside the transaction so the counter upsert is atomic with the insert.
+  const enquiry = await prisma.$transaction(
+    async (tx) => {
+      const ref = await allocateRfqReference(tx);
+      return tx.enquiry.create({
+        data: {
+          branchId: parsed.data.branchId,
+          organizationId: parsed.data.organizationId,
+          doerId: session.user.id,
+          contactPersonName: organization.contactPersonName,
+          contactPersonPhone: organization.contactPersonPhone,
+          contactPersonEmail: organization.contactPersonEmail,
+          status: "DRAFT",
+          referenceNo: ref.referenceNo,
+          refYear: ref.refYear,
+          refSequence: ref.refSequence,
+        },
+      });
     },
-  });
+    { timeout: 20000, maxWait: 10000 },
+  );
 
   return NextResponse.json({ enquiry }, { status: 201 });
 }

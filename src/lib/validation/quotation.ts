@@ -7,9 +7,17 @@ export const QUOTATION_CHARGE_CATEGORY_OPTIONS = [
   { value: "REIMBURSEMENT", label: "Reimbursement Charges" },
 ] as const;
 
-export function formatQuotationRef(createdAt: string | Date, sequenceNumber: number): string {
-  const year = new Date(createdAt).getFullYear();
-  return `QUO-${year}-${String(sequenceNumber).padStart(4, "0")}`;
+// Unified reference: prefer the stored RFQ-DDMMYY-NNNN string (inherited from the
+// primary bundled Enquiry); fall back to the legacy computed QUO-YYYY-NNNN for
+// rows created before the reference backfill.
+export function formatQuotationRef(row: {
+  referenceNo?: string | null;
+  createdAt: string | Date;
+  sequenceNumber: number;
+}): string {
+  if (row.referenceNo) return row.referenceNo;
+  const year = new Date(row.createdAt).getFullYear();
+  return `QUO-${year}-${String(row.sequenceNumber).padStart(4, "0")}`;
 }
 
 export const createQuotationSchema = z.object({

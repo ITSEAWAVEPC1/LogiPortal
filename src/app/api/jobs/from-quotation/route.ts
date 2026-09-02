@@ -22,7 +22,9 @@ export async function GET(request: NextRequest) {
       organization: { select: { id: true, name: true } },
       enquiries: {
         include: {
-          enquiry: { select: { sequenceNumber: true, createdAt: true, shipmentType: true, serviceTypes: true } },
+          enquiry: {
+            select: { sequenceNumber: true, referenceNo: true, createdAt: true, shipmentType: true, serviceTypes: true },
+          },
           job: { select: { id: true } },
         },
         orderBy: { createdAt: "asc" },
@@ -38,7 +40,7 @@ export async function GET(request: NextRequest) {
     organization: quotation.organization,
     rows: quotation.enquiries.map((qe) => ({
       quotationEnquiryId: qe.id,
-      enquiryRef: formatEnquiryRef(qe.enquiry.createdAt, qe.enquiry.sequenceNumber),
+      enquiryRef: formatEnquiryRef(qe.enquiry),
       shipmentType: qe.enquiry.shipmentType,
       serviceTypes: qe.enquiry.serviceTypes,
       jobId: qe.job?.id ?? null,

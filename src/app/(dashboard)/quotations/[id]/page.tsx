@@ -25,7 +25,14 @@ export default async function QuotationDetailPage({ params }: QuotationDetailPag
       enquiries: {
         include: {
           enquiry: {
-            select: { id: true, sequenceNumber: true, createdAt: true, shipmentType: true, serviceTypes: true },
+            select: {
+              id: true,
+              sequenceNumber: true,
+              referenceNo: true,
+              createdAt: true,
+              shipmentType: true,
+              serviceTypes: true,
+            },
           },
         },
       },

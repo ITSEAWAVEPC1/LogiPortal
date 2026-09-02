@@ -39,6 +39,7 @@ export const DOCUMENT_CARD_SELECT = {
     select: {
       id: true,
       sequenceNumber: true,
+      referenceNo: true,
       createdAt: true,
       organizationId: true,
       organization: { select: { name: true } },
@@ -76,7 +77,7 @@ export function serializeDocument(d: CardRow | DetailRow) {
     id: d.id,
     ref: formatDocumentRef(d.createdAt, d.sequenceNumber),
     jobId: d.jobId,
-    jobRef: formatJobRef(d.job.createdAt, d.job.sequenceNumber),
+    jobRef: formatJobRef(d.job),
     organizationName: d.job.organization.name,
     kind: d.kind,
     origin: d.origin,

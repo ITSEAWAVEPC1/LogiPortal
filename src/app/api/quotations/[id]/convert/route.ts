@@ -51,7 +51,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
   const quotationSnapshot = {
     id: quotation.id,
-    ref: formatQuotationRef(quotation.createdAt, quotation.sequenceNumber),
+    ref: formatQuotationRef(quotation),
     versionNumber: currentVersion.versionNumber,
     currency: currentVersion.currency,
     totalAmount: currentVersion.totalAmount,

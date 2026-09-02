@@ -95,7 +95,7 @@ function containers(job: JobForDocument): DocContainerRow[] {
 function base(job: JobForDocument, kind: GeneratableKind, ref: string): DocumentPdfBase {
   return {
     ref,
-    jobRef: formatJobRef(job.createdAt, job.sequenceNumber),
+    jobRef: formatJobRef(job),
     title: TITLE[kind],
     generatedAt: new Date().toISOString(),
     organizationName: job.organization.name,

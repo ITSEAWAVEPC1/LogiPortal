@@ -23,9 +23,16 @@ export const DELIVERY_TYPE_OPTIONS = [
   { value: "DESTUFF", label: "Destuff" },
 ] as const;
 
-export function formatEnquiryRef(createdAt: string | Date, sequenceNumber: number): string {
-  const year = new Date(createdAt).getFullYear();
-  return `ENQ-${year}-${String(sequenceNumber).padStart(4, "0")}`;
+// Unified reference: prefer the stored RFQ-DDMMYY-NNNN string; fall back to the
+// legacy computed ENQ-YYYY-NNNN for rows created before the reference backfill.
+export function formatEnquiryRef(row: {
+  referenceNo?: string | null;
+  createdAt: string | Date;
+  sequenceNumber: number;
+}): string {
+  if (row.referenceNo) return row.referenceNo;
+  const year = new Date(row.createdAt).getFullYear();
+  return `ENQ-${year}-${String(row.sequenceNumber).padStart(4, "0")}`;
 }
 
 const num = z.number().nullable().optional();
