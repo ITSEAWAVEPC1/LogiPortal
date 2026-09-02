@@ -10,6 +10,23 @@ import {
   Textarea,
 } from "@/components/ui";
 import type { Step } from "@/components/ui/StepTracker";
+import { Button as SButton } from "@/components/shadcn/button";
+import { Badge as SBadge } from "@/components/shadcn/badge";
+import {
+  Card as SCard,
+  CardContent as SCardContent,
+  CardHeader as SCardHeader,
+  CardTitle as SCardTitle,
+} from "@/components/shadcn/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn/tabs";
+import {
+  Table as STable,
+  TableBody as STableBody,
+  TableCell as STableCell,
+  TableHead as STableHead,
+  TableHeader as STableHeader,
+  TableRow as STableRow,
+} from "@/components/shadcn/table";
 
 const demoSteps: Step[] = [
   { id: "1", label: "ETD from POL", status: "completed" },
@@ -88,7 +105,7 @@ export default function DesignSystemPage() {
         </Card>
       </section>
 
-      <section>
+      <section className="mb-10">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-secondary">Data table</h2>
         <DataTable
           columns={[
@@ -106,6 +123,94 @@ export default function DesignSystemPage() {
           getRowKey={(row) => row.id}
         />
       </section>
+
+      {/* Stage 10a — shadcn/ui primitives (src/components/shadcn/*), brand-mapped
+          via src/styles/shadcn-tokens.css. Used only on the new /dashboard and
+          /reports surfaces; the primitives above remain the app-wide set. */}
+      <div className="mt-16 border-t border-border-subtle pt-8">
+        <h1 className="mb-8 text-2xl font-semibold text-text-primary">shadcn/ui primitives (Stage 10a)</h1>
+
+        <section className="mb-10">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-secondary">Buttons</h2>
+          <div className="flex flex-wrap gap-3">
+            <SButton>Default</SButton>
+            <SButton variant="secondary">Secondary</SButton>
+            <SButton variant="outline">Outline</SButton>
+            <SButton variant="ghost">Ghost</SButton>
+            <SButton variant="destructive">Destructive</SButton>
+            <SButton disabled>Disabled</SButton>
+          </div>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-secondary">Badges</h2>
+          <div className="flex flex-wrap gap-3">
+            <SBadge>Default</SBadge>
+            <SBadge variant="secondary">Secondary</SBadge>
+            <SBadge variant="outline">Outline</SBadge>
+            <SBadge variant="destructive">Destructive</SBadge>
+          </div>
+        </section>
+
+        <section className="mb-10 grid gap-6 md:grid-cols-2">
+          <SCard>
+            <SCardHeader>
+              <SCardTitle>Card</SCardTitle>
+            </SCardHeader>
+            <SCardContent className="text-sm text-muted-foreground">
+              Header / Title / Content sub-components, on <code>bg-card</code> with a token border.
+            </SCardContent>
+          </SCard>
+
+          <SCard>
+            <SCardHeader>
+              <SCardTitle>Tabs</SCardTitle>
+            </SCardHeader>
+            <SCardContent>
+              <Tabs defaultValue="one">
+                <TabsList>
+                  <TabsTrigger value="one">Overview</TabsTrigger>
+                  <TabsTrigger value="two">Activity</TabsTrigger>
+                </TabsList>
+                <TabsContent value="one" className="pt-3 text-sm text-muted-foreground">
+                  Overview panel.
+                </TabsContent>
+                <TabsContent value="two" className="pt-3 text-sm text-muted-foreground">
+                  Activity panel.
+                </TabsContent>
+              </Tabs>
+            </SCardContent>
+          </SCard>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-secondary">Table</h2>
+          <SCard>
+            <SCardContent>
+              <STable>
+                <STableHeader>
+                  <STableRow>
+                    <STableHead>Job ID</STableHead>
+                    <STableHead>Customer</STableHead>
+                    <STableHead>Status</STableHead>
+                  </STableRow>
+                </STableHeader>
+                <STableBody>
+                  {demoRows.map((row) => (
+                    <STableRow key={row.id}>
+                      <STableCell className="font-medium">{row.id}</STableCell>
+                      <STableCell>{row.customer}</STableCell>
+                      <STableCell>
+                        <SBadge variant="outline">{row.status}</SBadge>
+                      </STableCell>
+                    </STableRow>
+                  ))}
+                </STableBody>
+              </STable>
+            </SCardContent>
+          </SCard>
+        </section>
+      </div>
     </div>
   );
 }

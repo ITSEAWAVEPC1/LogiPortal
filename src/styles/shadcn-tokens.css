@@ -1,0 +1,88 @@
+/* shadcn/ui token layer — Stage 10a.
+   Maps shadcn's conventional token names onto the Seawave brand palette
+   (src/styles/tokens.css · docs/platform-development-plan.md §2.1) so the
+   primitives in src/components/shadcn/ render on-brand without any component
+   edits. Light-only for Stage 10: the .dark / prefers-color-scheme blocks are
+   wired but inert (ThemeProvider forces the "light" class), left here so a
+   future dark mode is a token-only change. */
+
+:root {
+  --radius: 0.5rem;
+
+  /* surfaces */
+  --card: var(--surface-white);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-white);
+  --popover-foreground: var(--text-primary);
+
+  /* brand accents — teal = completed / positive, plum = active / attention (§2.1) */
+  --primary: var(--brand-teal);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-plum);
+  --secondary-foreground: #ffffff;
+
+  /* neutrals */
+  --muted: var(--bg-offwhite);
+  --muted-foreground: var(--text-secondary);
+  --accent: #eef7f8; /* teal-tinted hover wash */
+  --accent-foreground: var(--text-primary);
+
+  /* feedback */
+  --destructive: var(--status-danger-fg);
+  --destructive-foreground: #ffffff;
+
+  /* lines & focus */
+  --border: var(--border-subtle);
+  --input: var(--border-subtle);
+  --ring: var(--brand-teal);
+
+  /* charts — brand teal/plum pair + three supporting hues */
+  --chart-1: var(--brand-teal);
+  --chart-2: var(--brand-plum);
+  --chart-3: #6a9b3f;
+  --chart-4: #d98e2b;
+  --chart-5: #4b6baf;
+}
+
+/* Placeholder dark palette — NOT activated in Stage 10. */
+.dark {
+  --card: #26302f;
+  --card-foreground: #f3f1ea;
+  --popover: #26302f;
+  --popover-foreground: #f3f1ea;
+  --primary: var(--brand-teal);
+  --primary-foreground: #08201f;
+  --secondary: var(--brand-plum);
+  --secondary-foreground: #1b0f18;
+  --muted: #2e3a39;
+  --muted-foreground: #b7b3a6;
+  --accent: #2e3a39;
+  --accent-foreground: #f3f1ea;
+  --destructive: #ef4444;
+  --destructive-foreground: #1a0f0f;
+  --border: #3a4443;
+  --input: #3a4443;
+  --ring: var(--brand-teal);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    --card: #26302f;
+    --card-foreground: #f3f1ea;
+    --popover: #26302f;
+    --popover-foreground: #f3f1ea;
+    --primary: var(--brand-teal);
+    --primary-foreground: #08201f;
+    --secondary: var(--brand-plum);
+    --secondary-foreground: #1b0f18;
+    --muted: #2e3a39;
+    --muted-foreground: #b7b3a6;
+    --accent: #2e3a39;
+    --accent-foreground: #f3f1ea;
+    --destructive: #ef4444;
+    --destructive-foreground: #1a0f0f;
+    --border: #3a4443;
+    --input: #3a4443;
+    --ring: var(--brand-teal);
+  }
+}

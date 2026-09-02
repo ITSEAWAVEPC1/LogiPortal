@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { Toaster } from "@/components/shadcn/sonner";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -29,6 +30,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         />
         <main className="flex-1 overflow-y-auto bg-background p-6">{children}</main>
       </div>
+      <Toaster />
     </div>
   );
 }

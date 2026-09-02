@@ -1,8 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { signOut } from "next-auth/react";
+import { Bell, ChevronDown } from "lucide-react";
 import { ROLE_LABELS, type Role } from "@/lib/permissions/roles";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/shadcn/dropdown-menu";
 
 interface Branch {
   id: string;
@@ -26,7 +36,7 @@ export function Topbar({ userName, role, branches }: TopbarProps) {
         className="w-64 rounded-md border border-border-subtle bg-background px-3 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-brand-teal"
       />
       <div className="flex items-center gap-4">
-        {branches.length > 0 && (
+        {role === "ADMIN" && branches.length > 0 && (
           <select
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
@@ -42,23 +52,35 @@ export function Topbar({ userName, role, branches }: TopbarProps) {
         )}
         <button
           type="button"
-          className="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-secondary hover:bg-background"
+          aria-label="Notifications"
+          className="rounded-md border border-border-subtle p-2 text-text-secondary hover:bg-background"
         >
-          Notifications
+          <Bell className="size-4" />
         </button>
-        <div className="flex items-center gap-3">
-          <div className="text-right leading-tight">
-            <p className="text-sm font-medium text-text-primary">{userName}</p>
-            <p className="text-xs text-text-secondary">{ROLE_LABELS[role]}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-secondary hover:bg-background"
-          >
-            Sign out
-          </button>
-        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger className="flex items-center gap-2 rounded-md border border-border-subtle px-3 py-1.5 text-left text-sm hover:bg-background focus:outline-none focus:ring-2 focus:ring-brand-teal">
+            <span className="leading-tight">
+              <span className="block font-medium text-text-primary">{userName}</span>
+              <span className="block text-xs text-text-secondary">{ROLE_LABELS[role]}</span>
+            </span>
+            <ChevronDown className="size-4 text-text-tertiary" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="font-normal">
+              <span className="block text-sm font-medium text-text-primary">{userName}</span>
+              <span className="block text-xs text-text-secondary">{ROLE_LABELS[role]}</span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/settings/notifications">Notification preferences</Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => signOut({ callbackUrl: "/login" })}>
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
