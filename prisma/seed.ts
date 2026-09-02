@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient, type Role, type FieldAccessLevel } from "../src/generated/prisma/client";
 import { IMPORT_WORKFLOW_TEMPLATES } from "../src/lib/workflow/import-tracks";
+import { EXPORT_WORKFLOW_TEMPLATES } from "../src/lib/workflow/export-tracks";
 
 const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -74,7 +75,12 @@ const FIELD_PERMISSIONS: Record<Role, Record<string, FieldAccessLevel>> = {
     portVesselContainer: "VIEW",
     workflowStatus: "VIEW",
     charges: "VIEW",
-    dutyPayment: "VIEW",
+    // Stage 6: tightened from VIEW to NONE (fail-closed) — §4.3 wants a
+    // conditional view ("if their liability" / landed-cost-only on DDP) that
+    // the flat NONE/VIEW/EDIT model can't express, and Customer has no
+    // `jobs` capability at all yet (Stage 9). Revisit when Stage 9 builds
+    // the real per-organization liability view.
+    dutyPayment: "NONE",
     internalNotes: "NONE",
     documents: "VIEW",
   },
@@ -188,32 +194,36 @@ async function main() {
     });
   }
 
-  // Stage 5 — Import workflow templates (Ex-Works & FOB). Idempotent: the
-  // template upserts on (shipmentType, incotermKey) and each step on
-  // (templateId, stepKey), so a re-run refreshes labels/order/roles without
+  // Stage 5/6 — Import (Ex-Works & FOB) + Export (CIF/DDP/DDU x none/Dock/
+  // Factory) workflow templates. Idempotent: the template upserts on
+  // (shipmentType, incotermKey) and each step on (templateId, stepKey), so a
+  // re-run refreshes labels/order/roles/isFinal/isSkippable without
   // duplicating rows or disturbing any in-flight JobWorkflowProgress.
   console.log("Seeding workflow templates...");
-  for (const tpl of IMPORT_WORKFLOW_TEMPLATES) {
+  for (const tpl of [...IMPORT_WORKFLOW_TEMPLATES, ...EXPORT_WORKFLOW_TEMPLATES]) {
     const template = await prisma.workflowTemplate.upsert({
       where: { shipmentType_incotermKey: { shipmentType: tpl.shipmentType, incotermKey: tpl.incotermKey } },
       update: { name: tpl.name },
       create: { name: tpl.name, shipmentType: tpl.shipmentType, incotermKey: tpl.incotermKey },
     });
-    for (let i = 0; i < tpl.steps.length; i++) {
-      const step = tpl.steps[i];
-      const data = {
-        label: step.label,
-        sortOrder: i,
-        ownerRole: step.ownerRole,
-        approverRole: step.approverRole ?? null,
-        isApprovalGate: Boolean(step.approverRole),
-      };
-      await prisma.workflowStep.upsert({
-        where: { templateId_stepKey: { templateId: template.id, stepKey: step.stepKey } },
-        update: data,
-        create: { templateId: template.id, stepKey: step.stepKey, ...data },
-      });
-    }
+    await Promise.all(
+      tpl.steps.map((step, i) => {
+        const data = {
+          label: step.label,
+          sortOrder: i,
+          ownerRole: step.ownerRole,
+          approverRole: step.approverRole ?? null,
+          isApprovalGate: Boolean(step.approverRole),
+          isSkippable: Boolean(step.isSkippable),
+          isFinal: i === tpl.steps.length - 1,
+        };
+        return prisma.workflowStep.upsert({
+          where: { templateId_stepKey: { templateId: template.id, stepKey: step.stepKey } },
+          update: data,
+          create: { templateId: template.id, stepKey: step.stepKey, ...data },
+        });
+      }),
+    );
   }
 
   console.log("Done. Test users (password: %s):", TEST_PASSWORD);

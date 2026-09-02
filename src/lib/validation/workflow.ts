@@ -13,13 +13,15 @@ import { ROLES } from "@/lib/permissions/roles";
 // this is the single source of truth for its shape.
 // ---------------------------------------------------------------------------
 
-export type StepFieldType = "date" | "text" | "number";
+export type StepFieldType = "date" | "text" | "number" | "select";
 
 export interface StepFieldDef {
   key: string;
   label: string;
   type: StepFieldType;
   required?: boolean;
+  // Required when type === "select" — the fixed set of valid values.
+  options?: string[];
   // Prefill from the Job when the step has no saved data yet (Freight
   // Certificate reuses Shipper/Consignee/port values already on the Job).
   prefillFrom?: "shipperName" | "consigneeName" | "portOfLoading" | "portOfDischarge";
@@ -72,6 +74,59 @@ export const WORKFLOW_STEP_FIELDS: Record<string, StepFieldDef[]> = {
     { key: "date", label: "Delivery Confirmed Date", type: "date", required: true },
     NOTE,
   ],
+
+  // --- Stage 6 — Export tracks ---------------------------------------------
+  export_booking_confirmation: [
+    { key: "bookingNumber", label: "Booking No.", type: "text", required: true },
+    { key: "date", label: "Booking Date", type: "date", required: true },
+    NOTE,
+  ],
+  export_si_filing: [
+    { key: "siReference", label: "SI Reference", type: "text", required: true },
+    { key: "date", label: "SI Filed On", type: "date", required: true },
+    { key: "shipperName", label: "Shipper Name", type: "text", required: true, prefillFrom: "shipperName" },
+    { key: "consigneeName", label: "Consignee Name", type: "text", required: true, prefillFrom: "consigneeName" },
+    NOTE,
+  ],
+  export_bl_type: [
+    { key: "blType", label: "BL Type", type: "select", required: true, options: ["Original", "Seaway"] },
+    { key: "date", label: "BL Type Confirmed On", type: "date", required: true },
+    NOTE,
+  ],
+  export_bl_release: [
+    { key: "blNumber", label: "BL No.", type: "text", required: true },
+    { key: "blDate", label: "BL Date", type: "date", required: true },
+    NOTE,
+  ],
+  export_customs_clearance_pod: [
+    { key: "status", label: "Customs Clearance Status", type: "text", required: true },
+    DATE,
+    NOTE,
+  ],
+  // Seawave pays the duty on the customer's behalf; paymentReference records
+  // the outbound payment Seawave made.
+  export_duty_payment: [
+    { key: "dutyAmount", label: "Duty Amount", type: "number", required: true },
+    { key: "date", label: "Payment Date", type: "date", required: true },
+    { key: "paymentReference", label: "Payment Reference", type: "text" },
+    NOTE,
+  ],
+  // DDU: duty is the Consignee's own liability — Accounts only reconciles,
+  // so this records a confirmation, not a Seawave payment (asymmetric from
+  // export_duty_payment by design).
+  export_duty_payment_consignee: [
+    { key: "dutyAmount", label: "Duty Amount (Consignee Account)", type: "number", required: true },
+    { key: "date", label: "Confirmed On", type: "date", required: true },
+    { key: "reference", label: "Consignee Payment Reference", type: "text" },
+    NOTE,
+  ],
+  // The two sub-dates on the source doc's "Bill Preparation" row for
+  // DDP/DDU — reused for CIF too (stage-6.md decision #1).
+  export_bill_preparation: [
+    { key: "sailFromPolDate", label: "Bill raised — once sailed from POL", type: "date", required: true },
+    { key: "arrivedAtPodDate", label: "Bill raised — once vessel arrived at POD", type: "date", required: true },
+    NOTE,
+  ],
 };
 
 export function stepFieldDefs(stepKey: string): StepFieldDef[] {
@@ -113,6 +168,13 @@ export function validateStepData(
         continue;
       }
       out[f.key] = n;
+    } else if (f.type === "select") {
+      const s = String(v);
+      if (f.options && !f.options.includes(s)) {
+        issues.push({ field: f.key, message: `${f.label} must be one of: ${f.options.join(", ")}` });
+        continue;
+      }
+      out[f.key] = s;
     } else {
       out[f.key] = v as string;
     }
@@ -125,7 +187,7 @@ export function validateStepData(
 // Route payload schemas
 // ---------------------------------------------------------------------------
 
-export const STEP_ACTIONS = ["save", "complete", "submit", "approve", "reject", "revert"] as const;
+export const STEP_ACTIONS = ["save", "complete", "submit", "approve", "reject", "revert", "skip"] as const;
 export type StepAction = (typeof STEP_ACTIONS)[number];
 
 export const stepActionSchema = z.object({

@@ -1,4 +1,4 @@
-import type { Role } from "@/lib/permissions/roles";
+import type { WorkflowStepDef, WorkflowTemplateDef } from "./types";
 
 // Stage 5 — the two Import workflow tracks as data (seeded into
 // WorkflowTemplate / WorkflowStep by prisma/seed.ts, admin-editable
@@ -9,20 +9,6 @@ import type { Role } from "@/lib/permissions/roles";
 // Checking & Approval (owner DOER -> approver BRANCH_MANAGER). Freight
 // Certificate Preparation and Bill Preparation are Accounts-owned single
 // steps (no separate approver) — see stage-5.md decision #2.
-
-export interface WorkflowStepDef {
-  stepKey: string;
-  label: string;
-  ownerRole: Role;
-  approverRole?: Role;
-}
-
-export interface WorkflowTemplateDef {
-  name: string;
-  shipmentType: "IMPORT" | "EXPORT";
-  incotermKey: string;
-  steps: WorkflowStepDef[];
-}
 
 // Import — Ex-Works track, 17 steps. The FOB track (§5.6) is this list minus
 // "container_pickup_date", renumbered — derived below so the shared steps
@@ -61,12 +47,7 @@ export const IMPORT_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
   { name: "Import — FOB", shipmentType: "IMPORT", incotermKey: "FOB", steps: IMPORT_FOB_STEPS },
 ];
 
-// Completing this step also flips Job.status -> COMPLETED (§5.5 step 17).
-export const FINAL_STEP_KEY = "delivered_status";
-
-// Job.incoterm is free-text; this is the bucket key matched against
-// WorkflowTemplate.incotermKey. Only EXW and FOB are seeded this stage — any
-// other Import Incoterm attaches no workflow (stage-5.md decision #1).
-export function normalizeIncotermKey(incoterm: string | null | undefined): string {
-  return (incoterm ?? "").trim().toUpperCase();
-}
+// Note: "delivered_status" (the last step above) completes the Job via
+// WorkflowStep.isFinal (seeded as the last step of every template) — see
+// prisma/seed.ts. Only EXW and FOB are seeded for Import — any other Import
+// Incoterm attaches no workflow (stage-5.md decision #1).

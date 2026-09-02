@@ -62,7 +62,9 @@ export function WorkflowPanel({ jobId }: { jobId: string }) {
     [data, effectiveSelectedId],
   );
 
-  const completedCount = data?.progress.filter((p) => p.status === "COMPLETED").length ?? 0;
+  // SKIPPED counts as done for the progress readout — an "if required" step
+  // that was skipped shouldn't leave the job stuck below 100%.
+  const completedCount = data?.progress.filter((p) => p.status === "COMPLETED" || p.status === "SKIPPED").length ?? 0;
 
   async function runAction(action: StepAction, payload: { data?: Record<string, unknown>; note?: string }) {
     if (!selectedStep) return;
@@ -110,8 +112,8 @@ export function WorkflowPanel({ jobId }: { jobId: string }) {
           No workflow steps are attached to this job.
         </p>
         <p className="mt-1 text-xs text-text-tertiary">
-          Import tracks exist for Ex-Works and FOB. A job with another Incoterm (or one approved before the workflow
-          engine shipped) has no tracker yet.
+          Import tracks exist for Ex-Works and FOB; Export tracks for CIF, DDP and DDU (with Dock/Factory Stuffing
+          variants). A job with another Incoterm — or one approved before its track shipped — has no tracker yet.
         </p>
       </Card>
     );

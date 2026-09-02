@@ -11,6 +11,7 @@ const ACTION_LABEL: Record<string, string> = {
   "workflow.step.approved": "approved",
   "workflow.step.rejected": "rejected",
   "workflow.step.reverted": "reverted",
+  "workflow.step.skipped": "skipped",
   "job.completed": "marked the job delivered",
 };
 

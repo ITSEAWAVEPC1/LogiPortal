@@ -6,8 +6,9 @@ export type WorkflowStepStatus = "PENDING" | "IN_PROGRESS" | "PENDING_APPROVAL" 
 export interface StepFieldDef {
   key: string;
   label: string;
-  type: "date" | "text" | "number";
+  type: "date" | "text" | "number" | "select";
   required?: boolean;
+  options?: string[];
   prefillFrom?: string;
 }
 
@@ -27,6 +28,7 @@ export interface WorkflowProgressStep {
   ownerRole: string;
   approverRole: string | null;
   isApprovalGate: boolean;
+  isSkippable: boolean;
   completedBy: Person | null;
   completedAt: string | null;
   approvedBy: Person | null;
@@ -54,4 +56,4 @@ export interface WorkflowData {
   canManageTemplates: boolean;
 }
 
-export type StepAction = "save" | "complete" | "submit" | "approve" | "reject" | "revert";
+export type StepAction = "save" | "complete" | "submit" | "approve" | "reject" | "revert" | "skip";

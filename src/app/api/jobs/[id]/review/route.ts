@@ -11,9 +11,11 @@ const reviewSchema = z.object({
 });
 
 // Branch Manager's final-review gate: PENDING_REVIEW -> WORKFLOW_IN_PROGRESS or
-// NEEDS_CORRECTION. On approve, the Incoterm on the Job selects a Stage 5
-// workflow template and its steps are copied onto the Job (attachWorkflow) in
-// the same transaction — a non-EXW/FOB Import Job simply gets no steps.
+// NEEDS_CORRECTION. On approve, the Incoterm (+ exportStuffingType for Export)
+// on the Job selects a Stage 5/6 workflow template and its steps are copied
+// onto the Job (attachWorkflow) in the same transaction — a Job whose
+// Incoterm/stuffing combination has no matching template simply gets no
+// steps.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
       const attach = await attachWorkflow(
         tx,
-        { id: u.id, shipmentType: u.shipmentType, incoterm: u.incoterm },
+        { id: u.id, shipmentType: u.shipmentType, incoterm: u.incoterm, exportStuffingType: u.exportStuffingType },
         session.user.id,
       );
       return { job: u, workflow: attach };

@@ -64,6 +64,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (access.portVesselContainer === "EDIT") {
     Object.assign(jobData, {
       incoterm: d.incoterm,
+      exportStuffingType: d.exportStuffingType,
       serviceTypes: d.serviceTypes,
       agentDetails: d.agentDetails,
       placeOfReceipt: d.placeOfReceipt,

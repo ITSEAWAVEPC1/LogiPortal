@@ -29,6 +29,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     shipmentType: job.shipmentType,
     serviceTypes: job.serviceTypes,
     incoterm: job.incoterm,
+    exportStuffingType: job.exportStuffingType,
     agentDetails: job.agentDetails,
     placeOfReceipt: job.placeOfReceipt,
     portOfLoading: job.portOfLoading,

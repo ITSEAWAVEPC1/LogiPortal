@@ -877,6 +877,14 @@ enum JobOrigin {
   IMPORTED
 }
 
+// Stage 6 — second template-selection dimension for Export jobs, folded into
+// WorkflowTemplate.incotermKey as a suffix ("CIF-DOCK", "CIF-FACTORY").
+enum ExportStuffingType {
+  NONE
+  DOCK
+  FACTORY
+}
+
 model Job {
   id     String    @id @default(cuid())
   status JobStatus @default(DRAFT)
@@ -899,6 +907,12 @@ model Job {
   // Free-text (EXW/FOB/CIF/DDP/DDU/...), same as EnquiryFreightDetail.incoterm.
   // Stage 5/6 reads this to attach the workflow template.
   incoterm String?
+
+  // Stage 6 — which stuffing track applies (Export + Transportation service
+  // only). Null = never asked (all Import jobs, and pre-Stage-6 Export jobs);
+  // NONE = asked, no stuffing service. Distinct from NONE so a submit-time
+  // check can tell "not applicable" from "not yet answered".
+  exportStuffingType ExportStuffingType?
 
   // Set only for origin = QUOTATION — one Job per converted enquiry.
   quotationEnquiryId String?           @unique
@@ -1057,8 +1071,9 @@ model ContainerDetail {
 // matching template's active steps are copied into JobWorkflowProgress rows
 // (denormalized snapshot — later template edits don't touch in-flight Jobs).
 // Every step action appends a JobAuditLog row; the log is append-only (no
-// PATCH/DELETE route exists). Export tracks (CIF/DDP/DDU) are Stage 6 and
-// reuse these same models. See docs/stage-checklists/stage-5.md.
+// PATCH/DELETE route exists). Export tracks (CIF/DDP/DDU) were added in
+// Stage 6, reusing these same models unchanged in shape. See
+// docs/stage-checklists/stage-5.md and stage-6.md.
 // Additive only.
 // ---------------------------------------------------------------------------
 
@@ -1067,14 +1082,16 @@ enum WorkflowStepStatus {
   IN_PROGRESS // current step, owner working on it
   PENDING_APPROVAL // owner submitted a two-actor gate step, waiting on approverRole
   COMPLETED
-  SKIPPED // reserved for Stage 6 "if required" steps; unused by the Import tracks
+  SKIPPED // Stage 6 "if required" steps (e.g. Empty Yard Amendment); unused by Import
 }
 
 model WorkflowTemplate {
   id           String       @id @default(cuid())
-  name         String // "Import — Ex-Works", "Import — FOB"
-  shipmentType ShipmentType // IMPORT now; EXPORT added in Stage 6
-  // Uppercased Incoterm bucket matched against Job.incoterm ("EXW" | "FOB").
+  name         String // "Import — Ex-Works", "Export — CIF — Dock Stuffing", ...
+  shipmentType ShipmentType // IMPORT | EXPORT
+  // Uppercased Incoterm bucket matched against Job.incoterm ("EXW" | "FOB" |
+  // "CIF" | "DDP" | "DDU"), with an Export stuffing-type suffix folded in
+  // ("CIF-DOCK" | "CIF-FACTORY") — see src/lib/workflow/types.ts.
   incotermKey  String
   isActive     Boolean      @default(true)
 
@@ -1104,6 +1121,8 @@ model WorkflowStep {
   approverRole   Role? // set only for a two-actor gate (Draft HBL -> BRANCH_MANAGER)
   isApprovalGate Boolean @default(false) // true iff approverRole set; drives UI emphasis
   isActive       Boolean @default(true) // soft-deactivate; no hard delete (app convention)
+  isFinal        Boolean @default(false) // completing this step flips Job.status -> COMPLETED
+  isSkippable    Boolean @default(false) // Stage 6 "if required" steps; enables the skip action
 
   progress JobWorkflowProgress[]
 
@@ -1166,7 +1185,7 @@ model JobAuditLog {
 
   // "workflow.attached" | "workflow.step.submitted" | "workflow.step.completed"
   // | "workflow.step.approved" | "workflow.step.rejected"
-  // | "workflow.step.reverted" | "job.completed"
+  // | "workflow.step.reverted" | "workflow.step.skipped" | "job.completed"
   action  String
   stepKey String?
   detail  Json? // { from, to, note, data } — free shape, like ImportRowError.errors

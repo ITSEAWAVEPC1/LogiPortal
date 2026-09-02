@@ -109,6 +109,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           });
         }
       }
+
+      // Stage 6 — isFinal must always be exactly the active step with the
+      // highest sortOrder, not just whatever the seed set once (an admin can
+      // reorder/insert/deactivate steps after seeding). Recompute on every
+      // edit rather than trusting the seed-time value.
+      const [lastActive] = await tx.workflowStep.findMany({
+        where: { templateId: id, isActive: true },
+        orderBy: { sortOrder: "desc" },
+        take: 1,
+        select: { id: true, isFinal: true },
+      });
+      await tx.workflowStep.updateMany({
+        where: { templateId: id, isFinal: true, ...(lastActive ? { id: { not: lastActive.id } } : {}) },
+        data: { isFinal: false },
+      });
+      if (lastActive && !lastActive.isFinal) {
+        await tx.workflowStep.update({ where: { id: lastActive.id }, data: { isFinal: true } });
+      }
     },
     { timeout: 20000, maxWait: 10000 },
   );

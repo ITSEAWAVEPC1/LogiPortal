@@ -7,6 +7,7 @@ import type { Role } from "@/lib/permissions/roles";
 import type { JobFieldGroup } from "@/lib/permissions/field-permissions";
 import { useAutosave } from "@/lib/hooks/useAutosave";
 import {
+  EXPORT_STUFFING_OPTIONS,
   formatJobRef,
   INCOTERM_OPTIONS,
   JOB_STATUS_OPTIONS,
@@ -55,6 +56,7 @@ export interface JobDetail {
   shipmentType: "IMPORT" | "EXPORT";
   serviceTypes?: ServiceTypeValue[];
   incoterm?: string | null;
+  exportStuffingType?: "NONE" | "DOCK" | "FACTORY" | null;
   organization: { id: string; name: string };
   branch: { id: string; name: string };
   createdBy: { id: string; name: string };
@@ -92,6 +94,7 @@ export interface JobDetail {
 
 interface FormState {
   incoterm: string;
+  exportStuffingType: string;
   serviceTypes: ServiceTypeValue[];
   agentDetails: string;
   placeOfReceipt: string;
@@ -126,6 +129,7 @@ function numOrNull(raw: string): number | null {
 function buildInitialState(job: JobDetail): FormState {
   return {
     incoterm: job.incoterm ?? "",
+    exportStuffingType: job.exportStuffingType ?? "",
     serviceTypes: job.serviceTypes ?? [],
     agentDetails: job.agentDetails ?? "",
     placeOfReceipt: job.placeOfReceipt ?? "",
@@ -176,6 +180,7 @@ function partyToPayload(p: PartyState) {
 function toAutosavePayload(f: FormState) {
   return {
     incoterm: f.incoterm || null,
+    exportStuffingType: (f.exportStuffingType || null) as "NONE" | "DOCK" | "FACTORY" | null,
     serviceTypes: f.serviceTypes,
     agentDetails: f.agentDetails || null,
     placeOfReceipt: f.placeOfReceipt || null,
@@ -261,12 +266,16 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
     setForm((prev) => ({ ...prev, [key]: v }));
   }
   function toggleService(value: ServiceTypeValue) {
-    setForm((prev) => ({
-      ...prev,
-      serviceTypes: prev.serviceTypes.includes(value)
-        ? prev.serviceTypes.filter((v) => v !== value)
-        : [...prev.serviceTypes, value],
-    }));
+    setForm((prev) => {
+      const removing = prev.serviceTypes.includes(value);
+      return {
+        ...prev,
+        serviceTypes: removing ? prev.serviceTypes.filter((v) => v !== value) : [...prev.serviceTypes, value],
+        // A stale Dock/Factory choice must not silently attach a stuffing
+        // track once Transportation is no longer part of this job.
+        exportStuffingType: removing && value === "TRANSPORTATION" ? "" : prev.exportStuffingType,
+      };
+    });
   }
 
   async function handleSubmit() {
@@ -353,6 +362,16 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
               options={INCOTERM_OPTIONS}
               disabled={routingDisabled}
             />
+            {job.shipmentType === "EXPORT" && (
+              <Select
+                label="Export Stuffing Type"
+                placeholder="Select..."
+                value={form.exportStuffingType}
+                onChange={(e) => set("exportStuffingType", e.target.value)}
+                options={EXPORT_STUFFING_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                disabled={routingDisabled || !form.serviceTypes.includes("TRANSPORTATION")}
+              />
+            )}
             <Input label="Agent Details" value={form.agentDetails} onChange={(e) => set("agentDetails", e.target.value)} disabled={routingDisabled} />
             <Input label="CFS Name" value={form.cfsName} onChange={(e) => set("cfsName", e.target.value)} disabled={routingDisabled} />
             <Input label="Place of Receipt" value={form.placeOfReceipt} onChange={(e) => set("placeOfReceipt", e.target.value)} disabled={routingDisabled} />
@@ -384,6 +403,11 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
                 />
               ))}
             </div>
+            {job.shipmentType === "EXPORT" && !form.serviceTypes.includes("TRANSPORTATION") && (
+              <p className="mt-2 text-xs text-text-tertiary">
+                Select Transportation to choose a Dock or Factory Stuffing track.
+              </p>
+            )}
           </div>
 
           <h2 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wide text-text-secondary">Cargo</h2>

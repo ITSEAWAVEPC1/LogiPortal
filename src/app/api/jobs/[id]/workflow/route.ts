@@ -36,7 +36,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       workflowProgress: {
         orderBy: { sortOrder: "asc" },
         include: {
-          step: { select: { ownerRole: true, approverRole: true, isApprovalGate: true } },
+          step: { select: { ownerRole: true, approverRole: true, isApprovalGate: true, isSkippable: true } },
           completedBy: { select: { id: true, name: true } },
           approvedBy: { select: { id: true, name: true } },
         },
@@ -95,6 +95,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       ownerRole: p.step.ownerRole,
       approverRole: p.step.approverRole,
       isApprovalGate: p.step.isApprovalGate,
+      isSkippable: p.step.isSkippable,
       completedBy: p.completedBy,
       completedAt: p.completedAt,
       approvedBy: p.approvedBy,

@@ -1,7 +1,7 @@
-import type { Prisma, ShipmentType } from "@/generated/prisma/client";
-import { normalizeIncotermKey } from "./import-tracks";
+import type { ExportStuffingType, Prisma, ShipmentType } from "@/generated/prisma/client";
+import { templateLookupKeys } from "./types";
 
-// Stage 5 — workflow attach + transition helpers. Kept transaction-client
+// Stage 5/6 — workflow attach + transition helpers. Kept transaction-client
 // parameterized so the review route can attach inside its existing
 // $transaction, and pure where possible so the step route can orchestrate.
 
@@ -9,6 +9,7 @@ export interface AttachableJob {
   id: string;
   shipmentType: ShipmentType;
   incoterm: string | null;
+  exportStuffingType?: ExportStuffingType | null;
 }
 
 export interface AttachResult {
@@ -21,11 +22,15 @@ export interface AttachResult {
 
 /**
  * Copies the active steps of the WorkflowTemplate matching
- * (job.shipmentType, normalized job.incoterm) into JobWorkflowProgress rows —
+ * (job.shipmentType, templateLookupKeys(job)) into JobWorkflowProgress rows —
  * lowest sortOrder IN_PROGRESS, the rest PENDING — and appends a
  * "workflow.attached" JobAuditLog row. No-op (attached:false) when the Job
  * already has progress rows or no active template matches its Incoterm
  * (stage-5.md decision #1). Called from the review route's approve branch.
+ *
+ * Export jobs try a stuffing-specific key first ("CIF-DOCK") and fall back to
+ * the plain incoterm key ("CIF") if that specific template has no active
+ * steps (e.g. an admin deactivated it) — see templateLookupKeys.
  */
 export async function attachWorkflow(
   tx: Prisma.TransactionClient,
@@ -35,15 +40,18 @@ export async function attachWorkflow(
   const existing = await tx.jobWorkflowProgress.count({ where: { jobId: job.id } });
   if (existing > 0) return { attached: false, reason: "already-attached" };
 
-  const template = await tx.workflowTemplate.findFirst({
-    where: {
-      shipmentType: job.shipmentType,
-      incotermKey: normalizeIncotermKey(job.incoterm),
-      isActive: true,
-    },
+  const keys = templateLookupKeys(job);
+  if (keys.length === 0) return { attached: false, reason: "no-template" };
+
+  const candidates = await tx.workflowTemplate.findMany({
+    where: { shipmentType: job.shipmentType, incotermKey: { in: keys }, isActive: true },
     include: { steps: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
   });
-  if (!template || template.steps.length === 0) return { attached: false, reason: "no-template" };
+  // `in` doesn't preserve key order — pick by priority (most specific first),
+  // skipping any candidate with no active steps.
+  const template =
+    keys.map((k) => candidates.find((c) => c.incotermKey === k)).find((t) => t && t.steps.length > 0) ?? null;
+  if (!template) return { attached: false, reason: "no-template" };
 
   await tx.jobWorkflowProgress.createMany({
     data: template.steps.map((step, i) => ({

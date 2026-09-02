@@ -14,6 +14,13 @@ export const INCOTERM_OPTIONS = ["EXW", "FOB", "CIF", "DDP", "DDU", "FCA", "CPT"
 
 export const COMMON_CONTAINER_TYPES = ["20GP", "40GP", "40HC", "20RF", "40RF", "20OT", "40OT", "20FR", "40FR", "20TK"];
 
+// Stage 6 — Export + Transportation jobs pick which stuffing track applies.
+export const EXPORT_STUFFING_OPTIONS = [
+  { value: "NONE", label: "None" },
+  { value: "DOCK", label: "Dock Stuffing" },
+  { value: "FACTORY", label: "Factory Stuffing" },
+] as const;
+
 export const JOB_STATUS_OPTIONS = [
   { value: "DRAFT", label: "Draft" },
   { value: "PENDING_REVIEW", label: "Pending Review" },
@@ -35,6 +42,7 @@ const int = z.number().int().nullable().optional();
 const str = z.string().trim().nullable().optional();
 
 const shipmentTypeEnum = z.enum(["IMPORT", "EXPORT"]);
+const exportStuffingEnum = z.enum(["NONE", "DOCK", "FACTORY"]);
 const serviceTypeEnum = z.enum([
   "FREIGHT_FORWARDING",
   "CUSTOMS_CLEARANCE",
@@ -103,6 +111,7 @@ export type JobChargeLineInput = z.infer<typeof chargeLineSchema>;
 export const jobAutosaveSchema = z.object({
   // portVesselContainer field group (routing / vessel / measurements / cargo).
   incoterm: str,
+  exportStuffingType: exportStuffingEnum.nullable().optional(),
   serviceTypes: z.array(serviceTypeEnum).optional(),
   agentDetails: str,
   placeOfReceipt: str,
@@ -149,6 +158,7 @@ export const JOB_FIELD_GROUP_KEYS = {
   shipperConsigneeNotify: ["shipperDetail", "consigneeDetail", "notifyPartyDetail"],
   portVesselContainer: [
     "incoterm",
+    "exportStuffingType",
     "serviceTypes",
     "agentDetails",
     "placeOfReceipt",
@@ -214,6 +224,19 @@ export const jobSubmitSchema = jobAutosaveSchema
     if (data.shipmentType === "IMPORT") {
       require(data.agentDetails, ["agentDetails"], "Agent Details are required");
       require(data.cfsName, ["cfsName"], "CFS Name is required");
+    }
+
+    // Stage 6 — an Export job with the Transportation service must pick Dock
+    // or Factory Stuffing before it can attach the right workflow template
+    // (source PDF's "If Transportation:" conditional on both stuffing types).
+    if (data.shipmentType === "EXPORT" && (data.serviceTypes ?? []).includes("TRANSPORTATION")) {
+      if (data.exportStuffingType !== "DOCK" && data.exportStuffingType !== "FACTORY") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["exportStuffingType"],
+          message: "Select Dock or Factory Stuffing for an Export job with Transportation service",
+        });
+      }
     }
 
     // If container rows were added, each must at least name its type.

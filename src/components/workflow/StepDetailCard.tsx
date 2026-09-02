@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Button, Card, Input, Modal, Textarea } from "@/components/ui";
+import { Button, Card, Input, Modal, Select, Textarea } from "@/components/ui";
 import type { StepAction, WorkflowProgressStep } from "./types";
 
 interface StepDetailCardProps {
@@ -39,7 +39,7 @@ function fmtDateTime(iso: string | null) {
 // (no set-state-in-effect).
 export function StepDetailCard({ step, viewerRole, busy, onAction }: StepDetailCardProps) {
   const [values, setValues] = useState<Record<string, string>>(() => initialValues(step));
-  const [notePrompt, setNotePrompt] = useState<null | "reject" | "revert">(null);
+  const [notePrompt, setNotePrompt] = useState<null | "reject" | "revert" | "skip">(null);
 
   const isAdmin = viewerRole === "ADMIN";
   const isOwner = viewerRole === step.ownerRole;
@@ -47,7 +47,7 @@ export function StepDetailCard({ step, viewerRole, busy, onAction }: StepDetailC
 
   const ownerCanAct = (isOwner || isAdmin) && (step.status === "PENDING" || step.status === "IN_PROGRESS");
   const approverCanAct = (isApprover || isAdmin) && step.status === "PENDING_APPROVAL";
-  const adminCanRevert = isAdmin && step.status === "COMPLETED";
+  const adminCanRevert = isAdmin && (step.status === "COMPLETED" || step.status === "SKIPPED");
   const editable = ownerCanAct;
 
   function set(key: string, v: string) {
@@ -62,9 +62,10 @@ export function StepDetailCard({ step, viewerRole, busy, onAction }: StepDetailC
     e.preventDefault();
     const form = e.target as HTMLFormElement;
     const note = (form.elements.namedItem("note") as HTMLTextAreaElement).value.trim();
-    if (!note) return;
+    if (!note && notePrompt !== "skip") return;
     if (notePrompt === "reject") onAction("reject", { note });
     if (notePrompt === "revert") onAction("revert", { note });
+    if (notePrompt === "skip") onAction("skip", note ? { note } : {});
     setNotePrompt(null);
   }
 
@@ -96,6 +97,16 @@ export function StepDetailCard({ step, viewerRole, busy, onAction }: StepDetailC
               key={f.key}
               label={f.label}
               rows={2}
+              value={values[f.key] ?? ""}
+              onChange={(e) => set(f.key, e.target.value)}
+              disabled={!editable}
+            />
+          ) : f.type === "select" ? (
+            <Select
+              key={f.key}
+              label={f.label + (f.required ? " *" : "")}
+              placeholder="Select..."
+              options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
               value={values[f.key] ?? ""}
               onChange={(e) => set(f.key, e.target.value)}
               disabled={!editable}
@@ -133,6 +144,11 @@ export function StepDetailCard({ step, viewerRole, busy, onAction }: StepDetailC
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           {ownerCanAct && (
             <>
+              {step.isSkippable && (
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => setNotePrompt("skip")}>
+                  Skip step
+                </Button>
+              )}
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => submitOwner("save")}>
                 Save draft
               </Button>
@@ -168,26 +184,28 @@ export function StepDetailCard({ step, viewerRole, busy, onAction }: StepDetailC
       <Modal
         open={notePrompt !== null}
         onClose={() => setNotePrompt(null)}
-        title={notePrompt === "revert" ? "Revert this step" : "Reject this step"}
+        title={notePrompt === "revert" ? "Revert this step" : notePrompt === "skip" ? "Skip this step" : "Reject this step"}
       >
         <form onSubmit={handleNotePrompt} className="flex flex-col gap-3">
           <Textarea
             name="note"
             label="Reason"
-            required
+            required={notePrompt !== "skip"}
             rows={4}
             placeholder={
               notePrompt === "revert"
                 ? "Why is this completed step being reopened? Later steps will reset to pending."
-                : "What needs to change before this can be approved?"
+                : notePrompt === "skip"
+                  ? "Optional — why is this step not required for this shipment?"
+                  : "What needs to change before this can be approved?"
             }
           />
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setNotePrompt(null)}>
               Cancel
             </Button>
-            <Button type="submit" variant="danger" disabled={busy}>
-              {notePrompt === "revert" ? "Revert" : "Reject"}
+            <Button type="submit" variant={notePrompt === "skip" ? "primary" : "danger"} disabled={busy}>
+              {notePrompt === "revert" ? "Revert" : notePrompt === "skip" ? "Skip" : "Reject"}
             </Button>
           </div>
         </form>

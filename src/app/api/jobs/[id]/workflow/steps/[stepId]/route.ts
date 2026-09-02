@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { stepActionSchema, validateStepData } from "@/lib/validation/workflow";
-import { FINAL_STEP_KEY } from "@/lib/workflow/import-tracks";
 import { nextPendingAfter, priorStepsComplete } from "@/lib/workflow/engine";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -36,7 +35,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const rows = await prisma.jobWorkflowProgress.findMany({
     where: { jobId: id },
     orderBy: { sortOrder: "asc" },
-    include: { step: { select: { ownerRole: true, approverRole: true, isApprovalGate: true } } },
+    include: {
+      step: { select: { ownerRole: true, approverRole: true, isApprovalGate: true, isFinal: true, isSkippable: true } },
+    },
   });
   const target = rows.find((r) => r.id === stepId);
   if (!target) return NextResponse.json({ error: "Step not found for this job" }, { status: 404 });
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await tx.jobWorkflowProgress.update({ where: { id: next.id }, data: { status: "IN_PROGRESS" } });
       }
       let jobCompleted = false;
-      if (target.stepKey === FINAL_STEP_KEY && job.status !== "COMPLETED") {
+      if (target.step.isFinal && job.status !== "COMPLETED") {
         await tx.job.update({ where: { id }, data: { status: "COMPLETED" } });
         await tx.jobAuditLog.create({ data: { jobId: id, actorId, action: "job.completed", stepKey: target.stepKey } });
         jobCompleted = true;
@@ -118,6 +119,38 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { progress: u, jobCompleted };
     }, TX);
     return NextResponse.json(result);
+  }
+
+  // --- skip: owner (or ADMIN) only, and only on an isSkippable step --------
+  if (action === "skip") {
+    if (!target.step.isSkippable) {
+      return NextResponse.json({ error: "This step cannot be skipped" }, { status: 400 });
+    }
+    if (!isAdmin && role !== ownerRole) {
+      return NextResponse.json({ error: `Only ${ownerRole} can skip this step` }, { status: 403 });
+    }
+    if (target.status !== "PENDING" && target.status !== "IN_PROGRESS") {
+      return NextResponse.json({ error: `Cannot skip a step that is ${target.status}` }, { status: 409 });
+    }
+    if (!priorStepsComplete(rows, target)) {
+      return NextResponse.json({ error: "An earlier step is not complete yet" }, { status: 409 });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // completedById/completedAt stay null — nobody completed it, they
+      // recorded that it doesn't apply to this shipment.
+      const u = await tx.jobWorkflowProgress.update({
+        where: { id: stepId },
+        data: { status: "SKIPPED" },
+      });
+      await writeAudit(tx, "workflow.step.skipped", note ? { note } : undefined);
+      const next = nextPendingAfter(rows, target.sortOrder);
+      if (next) {
+        await tx.jobWorkflowProgress.update({ where: { id: next.id }, data: { status: "IN_PROGRESS" } });
+      }
+      return u;
+    }, TX);
+    return NextResponse.json({ progress: result });
   }
 
   // --- approve / reject: approverRole (or ADMIN) only ---------------------
@@ -162,17 +195,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ progress: updated });
   }
 
-  // --- revert: ADMIN only ------------------------------------------------
+  // --- revert: ADMIN only -------------------------------------------------
   if (action === "revert") {
     if (!isAdmin) {
-      return NextResponse.json({ error: "Only an Admin can revert a completed step" }, { status: 403 });
+      return NextResponse.json({ error: "Only an Admin can revert a completed or skipped step" }, { status: 403 });
     }
-    if (target.status !== "COMPLETED") {
-      return NextResponse.json({ error: "Only a completed step can be reverted" }, { status: 409 });
+    if (target.status !== "COMPLETED" && target.status !== "SKIPPED") {
+      return NextResponse.json({ error: "Only a completed or skipped step can be reverted" }, { status: 409 });
     }
     if (!note) {
       return NextResponse.json({ error: "A note is required when reverting a step" }, { status: 400 });
     }
+    const revertedFrom = target.status;
     const laterIds = rows.filter((r) => r.sortOrder > target.sortOrder).map((r) => r.id);
 
     const result = await prisma.$transaction(async (tx) => {
@@ -206,7 +240,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         jobReopened = true;
       }
       await writeAudit(tx, "workflow.step.reverted", {
-        from: "COMPLETED",
+        from: revertedFrom,
         to: "IN_PROGRESS",
         note,
         laterStepsReset: laterIds.length,

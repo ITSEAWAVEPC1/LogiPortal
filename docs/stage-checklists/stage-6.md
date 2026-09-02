@@ -1,0 +1,78 @@
+# Stage 6 — Export Workflow Engine (CIF / DDP / DDU tracks + Dock/Factory Stuffing)
+
+Status: **Complete.** Acceptance criteria verified 2026-09-02 via a full direct-API run (79 checks, all passed) + rendered-HTML page checks + Import-regression spot-check.
+
+## What was built
+
+- **9 new `WorkflowTemplate` rows, zero new engine logic beyond what the schema already anticipated.** Reuses Stage 5's `attachWorkflow`/state-machine/UI unchanged except three additive extensions (below). Templates = 3 Incoterms (CIF/DDP/DDU) × 3 stuffing variants (none/Dock/Factory), composed in `src/lib/workflow/export-tracks.ts` from 4 reusable step arrays + 2 duty-step variants — mirrors Stage 5's "FOB = EXW minus one step" filter/derive precedent so shared steps physically cannot drift. Step counts: CIF 11 / CIF-DOCK 17 / CIF-FACTORY 15 · DDP 12 / DDP-DOCK 18 / DDP-FACTORY 16 · DDU 12 / DDU-DOCK 18 / DDU-FACTORY 16 (135 Export + 33 Import = 168 total `WorkflowStep` rows).
+- **Stuffing type folded into `WorkflowTemplate.incotermKey` as a suffix** (`"CIF"` / `"CIF-DOCK"` / `"CIF-FACTORY"`), not a new column — keeps the existing `@@unique([shipmentType, incotermKey])` constraint and the admin template screen/route completely untouched. New `Job.exportStuffingType` (`ExportStuffingType?`: `NONE`/`DOCK`/`FACTORY`, nullable with no default) records the Doer's choice; `templateLookupKeys()` (new `src/lib/workflow/types.ts`) returns lookup candidates most-specific-first (`["CIF-DOCK", "CIF"]`) so `attachWorkflow` degrades gracefully to the plain incoterm track if a stuffing-specific template is deactivated.
+- **Dock/Factory Stuffing are sequential, interleaved into one linear template**, not true parallel lanes (confirmed with the user — avoids adding a lane/group concept to the ordering guard). Stuffing steps are inserted after "Empty Yard Amendment" and before "BL Type Selection". `Job.exportStuffingType` is set on the Job form (Routing & Vessel card, Export jobs only), disabled until the Transportation service checkbox is ticked, and cleared automatically if Transportation is unchecked. Required at submit for any Export + Transportation job (new `jobSubmitSchema` `superRefine` rule).
+- **`WorkflowStep.isFinal`** (new column, default `false`, seeded as `i === steps.length - 1` per template) replaces the single global `FINAL_STEP_KEY` constant from Stage 5, which couldn't work once tracks have different final step keys (Export's is `export_bill_preparation`, Import's stays `delivered_status`). The admin template `PATCH` route recomputes `isFinal` on every edit (highest-sortOrder active step in the template), not just at seed time, so a reorder/append/deactivate can't leave it on the wrong step.
+- **`WorkflowStep.isSkippable`** (new column, default `false`) + a new `skip` action in the per-step state machine, exercising the `SKIPPED` status the Stage 5 schema comment explicitly reserved for this. Only `export_empty_yard_amendment` is seeded skippable. Owner-or-ADMIN only, only from `PENDING`/`IN_PROGRESS`, ordering-guard-checked, optional note, writes a `workflow.step.skipped` audit row, never triggers `isFinal` completion. `priorStepsComplete`/`currentActionableStep`'s existing `DONE = {COMPLETED, SKIPPED}` set already treated `SKIPPED` as satisfying the ordering guard — verified zero `engine.ts` changes were needed for this. `revert` was extended to accept a `SKIPPED` target (previously `COMPLETED`-only) so a skip decision can be corrected.
+- **`StepFieldDef` gained a `"select"` type** (`options: string[]`) for `export_bl_type`'s Original/Seaway choice — `StepDetailCard.tsx` renders it via the existing `Select` UI primitive; `validateStepData` rejects any value not in `options`.
+- **Duty payment: two deliberately separate layers, no schema change to the existing 3-field group.** `Job.dutyPaymentLiability`/`dutyAmount`/`dutyPaidBy` stay the Job-level *declaration* (unchanged field-group plumbing). The `export_duty_payment` (DDP) / `export_duty_payment_consignee` (DDU) step's own `JobWorkflowProgress.data` is the *actual* — written only by ACCOUNTS through the step route, never cross-written into the Job scalars (verified). The DDP/DDU distinction lives in the denormalized step **label** ("Duty Payment" vs. "Duty Payment — in Consignee Account"), frozen per-job at attach time.
+
+## DB models changed
+
+No new tables. Migration `prisma/migrations/20260902085151_stage_6_export_workflow_engine/` — exactly 4 statements, all additive (`CREATE TYPE "ExportStuffingType"`, `ALTER TABLE "jobs" ADD COLUMN "exportStuffingType"`, `ALTER TABLE "workflow_steps" ADD COLUMN "isFinal"` + `"isSkippable"`, both `NOT NULL DEFAULT false`). New enum `ExportStuffingType` (`NONE`/`DOCK`/`FACTORY`). No changes to `WorkflowTemplate`, `JobWorkflowProgress`, `JobAuditLog`, or `WorkflowStepStatus` (already had `SKIPPED`).
+
+## Endpoints changed (additive, not breaking)
+
+- `POST /api/jobs/[id]/review` — `attachWorkflow` call now passes `exportStuffingType`; otherwise unchanged, fully generic over shipmentType already.
+- `POST /api/jobs/[id]/workflow/steps/[stepId]` — `isFinal` replaces the `FINAL_STEP_KEY` import; new `skip` action; `revert` accepts `SKIPPED` in addition to `COMPLETED`.
+- `GET /api/jobs/[id]/workflow` — step `select`/mapped progress gained `isSkippable`.
+- `PATCH /api/workflow-templates/[id]` — recomputes `isFinal` after applying step edits.
+- `PATCH /api/jobs/[id]` — `exportStuffingType` added to the `portVesselContainer` EDIT-group `Object.assign`.
+- `POST /api/jobs/[id]/submit` — **bug caught during this stage's own verification, fixed before shipping**: the route builds its `jobSubmitSchema` input from explicit `job.*` fields and had not been updated to pass `exportStuffingType` through, which would have made the new submit-time stuffing-type rule fire unconditionally regardless of what was actually saved. Fixed by adding `exportStuffingType: job.exportStuffingType` to that object.
+
+## Permissions
+
+- **No changes** to `capabilities.ts`, `access-matrix.ts`, or `field-permissions.ts` — no new screen, no new field group. `exportStuffingType` rides the existing `portVesselContainer` group (same gating as `incoterm`).
+- **`prisma/seed.ts` — `CUSTOMER.dutyPayment` tightened `VIEW → NONE`** (decision #4, confirmed with the user). Zero live effect today (Customer has no `jobs` capability at all — Stage 9). §4.3's real rule ("View, if their liability") needs per-field, per-incoterm, per-organization logic the flat NONE/VIEW/EDIT model can't express; fail-closed until Stage 9 builds the real thing rather than leaving an unconditional VIEW as a false baseline.
+- Admin/Branch Manager/Doer/Sales/Accounts duty-payment access is otherwise **unchanged** from Stage 4/5's seed — it already matched this stage's confirmed scope exactly.
+
+## Key decisions (confirmed with the user before building)
+
+1. **CIF track = 11 steps**, same backbone as DDP/DDU minus the Duty Payment step — not the PDF table's literal 8-step reading (table left CIF's later cells blank; the plan's §5.7 narrative text — "Customs Clearance handled by Seawave; standard Delivery Order & Delivery" — was treated as authoritative since a CIF shipment still has to clear customs and get delivered).
+2. **Dock/Factory Stuffing are sequential, interleaved into one linear template**, not true parallel lanes — avoids adding a lane/group dimension to the ordering guard; matches the existing FOB-as-filtered-EXW precedent exactly.
+3. **Customer-specific duty visibility (DDP "landed cost only" / DDU "own liability only") deferred to Stage 9** — same reasoning Stage 4/5 used for every other Customer-facing Job nuance: Customer has no `jobs` capability at all yet, so there's no live path to build or verify it against.
+4. **`CUSTOMER.dutyPayment` seed tightened to `NONE`** (see Permissions above).
+5. **Admin template `PATCH` recomputes `isFinal`** on every edit rather than trusting only the seed-time value — closes the edge case where reordering/appending/deactivating steps could leave `isFinal` on a non-last step and auto-complete a Job early.
+
+Also resolved during design (not a user decision, an internal reconciliation): the plan's §5.7 shared-steps sentence lists "Bill Preparation (Accounts)" before "ETA to POD", but the source PDF table places Bill Preparation last in every Incoterm column, and its two sub-dates ("once sail from POL", "once vessel arrived at POD") require ETA to POD to already have happened — Bill Preparation is last in every Export template here, and is each template's `isFinal` step.
+
+## Implementation decisions (made during the build, cheap to reverse)
+
+- **Stuffing-type key suffix, not a new `WorkflowTemplate` column** — see "What was built" above. Reversible: adding a real column later would need a data migration off the suffix encoding, but nothing else depends on the suffix format.
+- **`WorkflowStepDef`/`WorkflowTemplateDef`/`normalizeIncotermKey` moved out of `import-tracks.ts` into a new shared `src/lib/workflow/types.ts`** (alongside the new `templateLookupKeys`) so `export-tracks.ts` doesn't import from a same-level "import" module. `import-tracks.ts` now only holds Import's step arrays.
+- **All new Export step keys use an `export_` prefix** — `WORKFLOW_STEP_FIELDS` is a flat, global map keyed by `stepKey` across both shipment types, so this guarantees zero collision with Import's existing keys (e.g. a distinct `export_bill_preparation` rather than reusing Import's bare `bill_preparation`, which has a different, simpler shape).
+- **Duty step data lives only in `JobWorkflowProgress.data`, never cross-written to `Job.dutyAmount` etc.** — keeps the step route's write surface exactly what it already was (progress + status + audit), keeps the Job-level fields a clean redactable declaration for Stage 9's landed-cost work, and avoids an ACCOUNTS actor completing a step getting an implicit side-channel write to Job scalars outside the field-permission layer.
+- **`WorkflowPanel.tsx`'s "N of M steps complete" now counts `SKIPPED` as done** alongside `COMPLETED` — otherwise a job with a skipped Empty Yard Amendment would be stuck below 100% forever. `WorkflowRail.tsx` needed no changes — its `statusLabel`/`dotClass` already handled `SKIPPED` (gray dot, "Skipped" label) since Stage 5 wrote it generically.
+- **Seed loop parallelizes per-step upserts within a template** (`Promise.all`) to keep ~168 total upserts fast against Neon — same "batch, don't serialize per-row" lesson as Stage 1's bulk import. Templates themselves stay sequential; idempotency (upsert keys unchanged) verified across two consecutive `db:seed` runs (stable at 11 templates / 168 steps both times).
+
+## Explicitly deferred (per plan scope)
+
+- **Customer-facing duty-payment view** (DDP landed-cost-only, DDU own-liability-only) — Stage 9, alongside `User.organizationId` row-scoping and the rest of Customer's Job access. See decision #3.
+- **True parallel Dock/Factory Stuffing lanes** — not planned; the sequential-interleaved model was the deliberate, confirmed choice, not a placeholder.
+- **Document uploads within steps**, **notifications on gate events**, **field-level Job-form diffing into `JobAuditLog`** — same Stage 7/10 deferrals as Stage 5, unchanged by this stage.
+
+## Verification
+
+Full direct-API run via a throwaway `tsx` script authenticating each role through the NextAuth credentials flow (79 checks, all passed), plus two rendered-HTML checks:
+
+1. **Attach matrix** — all 9 (Incoterm × stuffing) combinations attach with the exact expected step count, first row `IN_PROGRESS`/rest `PENDING`; Export + unrecognized Incoterm (`"FOB"`) → `attached:false`, 0 rows; deactivating `Export — CIF — Dock Stuffing` → a new CIF+DOCK job falls back to plain `Export — CIF` (11 steps); template reactivated afterward.
+2. **Skip action** — Sales → 403; a non-skippable step → 400; ordering guard still enforced; successful skip on `export_empty_yard_amendment` → `SKIPPED`, no `completedById`, `workflow.step.skipped` audit row, next step unlocked; re-skip → 409; Admin `revert` of a `SKIPPED` step → back to `IN_PROGRESS`, later steps reset to `PENDING`.
+3. **`isFinal`-driven completion** — driving a plain-CIF job to `export_bill_preparation`: Doer → 403 (Accounts-owned), partial data → 400, both required dates → `jobCompleted:true`, `Job.status COMPLETED`, `job.completed` audit row; Admin `revert` reopens it.
+4. **Gate + select field** — `export_bl_release` submit/reject/approve cycle (same shape as Stage 5's Draft HBL gate); `export_bl_type` rejects `"Express"` (400, lists valid options), accepts `"Seaway"`.
+5. **Duty steps** — Doer blocked (403) from both DDP/DDU duty steps; Accounts completes each; `Job.dutyAmount` scalar confirmed unchanged after the step write (no cross-write); DDU step's denormalized label confirmed `"Duty Payment — in Consignee Account"`; Sales `GET` omits all 3 `duty*` keys entirely, Accounts sees them.
+6. **Stuffing ordering** — a CIF-DOCK job's step sequence matches pre(5)+dock(6)+post(6) exactly by key; completing `export_bl_type` before the dock steps finish → 409.
+7. **Job-form gating** — Accounts PATCH (whole-resource edit, but `portVesselContainer` VIEW-only) leaves `exportStuffingType` untouched; Doer PATCH applies it; submit blocked (400, `issues[].path` includes `exportStuffingType`) on an Export+Transportation job with no stuffing type set, succeeds once set; an Import job's stray `exportStuffingType` value is confirmed irrelevant — EXW still attaches its normal 17 steps.
+8. **Admin template edit isolation** — reordering + renaming two steps on `Export — DDU — Factory Stuffing` is reflected in a job approved afterward but not in one already in-flight (byte-identical snapshot before/after); `isFinal` confirmed still on `export_bill_preparation` post-reorder; template restored to its original order/labels.
+9. **Import regression (zero-delta)** — EXW still attaches 17 steps, FOB 16; FOB's ordering guard still 409s an out-of-order complete; `delivered_status` (now driven by `isFinal` instead of the retired `FINAL_STEP_KEY` constant) still flips `Job.status → COMPLETED`.
+10. **Rendered HTML** — `/settings/workflow-templates` (Admin) contains all 11 template names; a new Export job's `/jobs/[id]` page contains the "Export Stuffing Type" label and both "Dock Stuffing"/"Factory Stuffing" options. (No interactive/browser-driven check was performed — no browser automation tool was available in this session and installing one wasn't requested; this repo's established convention per `CLAUDE.md` is direct API-script verification, which is what the 79 checks above are.)
+
+`npx prisma migrate dev` applied cleanly against Neon (verified 4 additive-only statements). `npm run db:seed` run twice — stable at 11 templates / 168 steps both times, back-filling `isFinal`/`isSkippable` onto the 33 pre-existing Import step rows with no duplication. `tsc --noEmit` and `eslint src prisma` both pass with zero errors. All `ZZZ`-prefixed test orgs/jobs and their workflow/audit rows deleted afterward (via a `finally` block that runs even on assertion failure — a first run crashed on a test-script bug and its orphaned data was cleaned up manually before re-running); the 11 seeded templates and pre-existing dev data left untouched. Throwaway scripts removed, not committed.
+
+## Failover
+
+Same as Stage 5: workflow templates are data, corrections go through `/settings/workflow-templates` with no deploy. The `isFinal` recompute on every admin edit is new insurance against a corrections-without-a-deploy edit accidentally breaking Job completion. No tag/push for this stage's completion — pushing to `origin/main` is a separate explicit user request.
