@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, DataTable, Input, Modal, Select } from "@/components/ui";
+import { Badge, Button, Combobox, DataTable, Input, Modal, Select, type ComboboxOption } from "@/components/ui";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/permissions/roles";
 
 interface UserRow {
@@ -12,6 +12,7 @@ interface UserRow {
   role: Role;
   isActive: boolean;
   branch: { id: string; name: string } | null;
+  organization: { id: string; name: string } | null;
 }
 
 interface Branch {
@@ -24,7 +25,15 @@ interface UserManagerProps {
   branches: Branch[];
 }
 
-const EMPTY_FORM = { name: "", email: "", role: "DOER" as Role, branchId: "", password: "" };
+const EMPTY_FORM = {
+  name: "",
+  email: "",
+  role: "DOER" as Role,
+  branchId: "",
+  password: "",
+  organizationId: "",
+  organizationName: "",
+};
 
 export function UserManager({ users, branches }: UserManagerProps) {
   const router = useRouter();
@@ -33,6 +42,13 @@ export function UserManager({ users, branches }: UserManagerProps) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const fetchOrganizations = useCallback(async (query: string): Promise<ComboboxOption[]> => {
+    const res = await fetch(`/api/customers?q=${encodeURIComponent(query)}&status=active`);
+    if (!res.ok) return [];
+    const body = await res.json();
+    return (body.organizations as { id: string; name: string }[]).map((o) => ({ value: o.id, label: o.name }));
+  }, []);
+
   function openCreate() {
     setForm(EMPTY_FORM);
     setError(null);
@@ -40,7 +56,15 @@ export function UserManager({ users, branches }: UserManagerProps) {
   }
 
   function openEdit(user: UserRow) {
-    setForm({ name: user.name, email: user.email, role: user.role, branchId: user.branch?.id ?? "", password: "" });
+    setForm({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      branchId: user.branch?.id ?? "",
+      password: "",
+      organizationId: user.organization?.id ?? "",
+      organizationName: user.organization?.name ?? "",
+    });
     setError(null);
     setModalState({ open: true, user });
   }
@@ -52,9 +76,23 @@ export function UserManager({ users, branches }: UserManagerProps) {
 
     const url = modalState.user ? `/api/users/${modalState.user.id}` : "/api/users";
     const method = modalState.user ? "PATCH" : "POST";
+    const isCustomer = form.role === "CUSTOMER";
     const payload = modalState.user
-      ? { name: form.name, role: form.role, branchId: form.branchId, ...(form.password ? { password: form.password } : {}) }
-      : form;
+      ? {
+          name: form.name,
+          role: form.role,
+          branchId: form.branchId,
+          ...(isCustomer ? { organizationId: form.organizationId } : {}),
+          ...(form.password ? { password: form.password } : {}),
+        }
+      : {
+          name: form.name,
+          email: form.email,
+          role: form.role,
+          branchId: form.branchId,
+          password: form.password,
+          ...(isCustomer ? { organizationId: form.organizationId } : {}),
+        };
 
     const res = await fetch(url, {
       method,
@@ -95,6 +133,7 @@ export function UserManager({ users, branches }: UserManagerProps) {
           { key: "email", header: "Email" },
           { key: "role", header: "Role", render: (row) => ROLE_LABELS[row.role] },
           { key: "branch", header: "Branch", render: (row) => row.branch?.name ?? "—" },
+          { key: "organization", header: "Organization", render: (row) => row.organization?.name ?? "—" },
           {
             key: "status",
             header: "Status",
@@ -155,6 +194,23 @@ export function UserManager({ users, branches }: UserManagerProps) {
             onChange={(e) => setForm({ ...form, branchId: e.target.value })}
             options={branches.map((b) => ({ value: b.id, label: b.name }))}
           />
+          {form.role === "CUSTOMER" && (
+            <Combobox
+              label="Organization"
+              value={form.organizationId}
+              displayValue={form.organizationName}
+              placeholder="Search organizations…"
+              fetchOptions={fetchOrganizations}
+              onChange={(id, option) =>
+                setForm({ ...form, organizationId: id, organizationName: option?.label ?? "" })
+              }
+            />
+          )}
+          {form.role === "CUSTOMER" && (
+            <p className="text-xs text-text-tertiary">
+              A customer login only ever sees this organization&apos;s shipments in the portal.
+            </p>
+          )}
           <Input
             label={modalState.user ? "New password (leave blank to keep current)" : "Temporary password"}
             type="password"

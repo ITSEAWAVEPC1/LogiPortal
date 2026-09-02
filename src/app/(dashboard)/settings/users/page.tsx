@@ -19,6 +19,7 @@ export default async function UsersSettingsPage() {
         role: true,
         isActive: true,
         branch: { select: { id: true, name: true } },
+        organization: { select: { id: true, name: true } },
       },
     }),
     prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),

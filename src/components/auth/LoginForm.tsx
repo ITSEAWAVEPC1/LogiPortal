@@ -31,7 +31,9 @@ export function LoginForm({ className, ...props }: ComponentProps<"form">) {
       return;
     }
 
-    router.push("/dashboard");
+    // Root route resolves the role-specific home (/portal for CUSTOMER,
+    // /dashboard otherwise).
+    router.push("/");
     router.refresh();
   }
 

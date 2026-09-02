@@ -258,6 +258,31 @@ async function main() {
     );
   }
 
+  // Stage 9 — the customer portal is organization-scoped, so the test customer
+  // login needs an organization to see anything. Prefer the long-standing dev
+  // org (which already has jobs / quotations / documents), fall back to the
+  // oldest active org, and only create a placeholder if the DB has none.
+  // Idempotent: re-running re-points to the same target.
+  console.log("Linking the test customer to an organization...");
+  const linkTarget =
+    (await prisma.organization.findFirst({
+      where: { name: "Test Exports Pvt Ltd" },
+      select: { id: true },
+    })) ??
+    (await prisma.organization.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    })) ??
+    (await prisma.organization.create({
+      data: { name: "Seawave Demo Customer", city: "Mumbai", state: "Maharashtra", branchId: branches[0].id },
+      select: { id: true },
+    }));
+  await prisma.user.update({
+    where: { email: "customer@test.seawave.com" },
+    data: { organizationId: linkTarget.id },
+  });
+
   console.log("Done. Test users (password: %s):", TEST_PASSWORD);
   TEST_USERS.forEach((u) => console.log(`  ${u.role.padEnd(15)} ${u.email}`));
 }

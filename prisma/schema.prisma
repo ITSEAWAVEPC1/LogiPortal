@@ -95,6 +95,9 @@ model User {
   branchAccountManagerFor       BranchAccountManager[] @relation("BranchAccountManagerUser")
   columnPreferences             UserColumnPreference[]
 
+  // Stage 9 — customer portal cross-organization access attempts
+  portalAccessLogs PortalAccessLog[]
+
   @@map("users")
 }
 
@@ -1406,4 +1409,40 @@ model DocumentVersion {
   @@unique([documentId, versionNumber])
   @@index([documentId])
   @@map("document_versions")
+}
+
+// ---------------------------------------------------------------------------
+// Stage 9 — Customer Portal
+//
+// The customer-facing portal is a read-only, strictly organization-scoped view
+// of a customer's own Jobs / Quotations / shared Documents. Every denied
+// cross-organization access attempt (a customer opening another org's job by
+// direct URL, or requesting a document/PDF that isn't theirs) is recorded
+// here — the plan §8 Stage 9 acceptance criterion ("log any attempted
+// violation"). Append-only, no mutation/DELETE route, same convention as
+// JobAuditLog. Also feeds Stage 10's audit-trail viewer.
+// ---------------------------------------------------------------------------
+
+enum PortalAccessOutcome {
+  DENIED_CROSS_ORG // resource belongs to a different organization
+  DENIED_UNLINKED // the customer user has no organization link
+  DENIED_NOT_FOUND // resource id does not resolve at all
+}
+
+model PortalAccessLog {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  viewerOrgId  String? // the customer user's own organization at the time
+  path         String // the request path that was blocked
+  resourceType String? // "job" | "quotation" | "document"
+  resourceId   String?
+  outcome      PortalAccessOutcome
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("portal_access_logs")
 }

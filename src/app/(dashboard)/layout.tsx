@@ -7,6 +7,10 @@ import { Topbar } from "@/components/layout/Topbar";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  // Stage 9 — CUSTOMER users live entirely in the /portal route group; bounce
+  // them off every internal route before any query runs (defense-in-depth
+  // alongside proxy's authorized() redirect and each page's can() check).
+  if (session.user.role === "CUSTOMER") redirect("/portal");
 
   const branches = await prisma.branch.findMany({
     where: { isActive: true },

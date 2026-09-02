@@ -13,23 +13,41 @@ export const authConfig = {
   },
   callbacks: {
     authorized({ auth, request }) {
-      const isLoggedIn = !!auth?.user;
-      const isOnLogin = request.nextUrl.pathname.startsWith("/login");
+      const { pathname } = request.nextUrl;
+      const user = auth?.user;
+      const isLoggedIn = !!user;
+      const isOnLogin = pathname.startsWith("/login");
+      const isOnPortal = pathname === "/portal" || pathname.startsWith("/portal/");
 
       if (isOnLogin) {
         if (isLoggedIn) {
-          return Response.redirect(new URL("/dashboard", request.nextUrl));
+          const home = user.role === "CUSTOMER" ? "/portal" : "/dashboard";
+          return Response.redirect(new URL(home, request.nextUrl));
         }
         return true;
       }
 
-      return isLoggedIn;
+      if (!isLoggedIn) return false;
+
+      // Stage 9 — role routing: CUSTOMER users live entirely in /portal, every
+      // other role in the internal app. This is the earliest bounce; the
+      // (portal) and (dashboard) layouts re-check server-side as the
+      // authoritative gate.
+      if (user.role === "CUSTOMER" && !isOnPortal) {
+        return Response.redirect(new URL("/portal", request.nextUrl));
+      }
+      if (user.role !== "CUSTOMER" && isOnPortal) {
+        return Response.redirect(new URL("/dashboard", request.nextUrl));
+      }
+
+      return true;
     },
     jwt({ token, user }) {
       if (user) {
         token.id = user.id!;
         token.role = user.role;
         token.branchId = user.branchId;
+        token.organizationId = user.organizationId;
       }
       return token;
     },
@@ -38,6 +56,7 @@ export const authConfig = {
       session.user.id = t.id;
       session.user.role = t.role;
       session.user.branchId = t.branchId;
+      session.user.organizationId = t.organizationId;
       return session;
     },
   },

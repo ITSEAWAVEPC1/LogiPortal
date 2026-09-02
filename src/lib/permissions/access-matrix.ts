@@ -88,7 +88,10 @@ const SCREEN_ACCESS: Record<Role, ScreenKey[]> = {
     "reports",
     "accounts",
   ],
-  CUSTOMER: ["dashboard", "customers", "quotations", "jobs", "documents"],
+  // Stage 9 — CUSTOMER users never render the internal dashboard shell (the
+  // (dashboard) layout redirects them to /portal); their navigation lives in
+  // the (portal) route group's own PortalNav.
+  CUSTOMER: [],
 };
 
 export function getVisibleNavItems(role: Role) {

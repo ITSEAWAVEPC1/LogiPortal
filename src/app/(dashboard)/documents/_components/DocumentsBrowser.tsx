@@ -19,9 +19,16 @@ const KIND_OPTIONS = (Object.keys(DOCUMENT_KIND_LABEL) as DocumentKindValue[]).m
 export function DocumentsBrowser({
   documents,
   viewerRole,
+  // Stage 9 — the customer portal reuses this browser but downloads through
+  // its own isolated /api/portal route and links jobs to /portal/jobs. Both
+  // default to the internal behaviour.
+  fileHrefFor = (d) => `/api/documents/${d.id}/versions/${d.currentVersionId}/file`,
+  jobHrefFor = (d) => `/jobs/${d.jobId}`,
 }: {
   documents: DocumentCard[];
   viewerRole: string;
+  fileHrefFor?: (d: DocumentCard) => string;
+  jobHrefFor?: (d: DocumentCard) => string | null;
 }) {
   const [kind, setKind] = useState("");
   const [status, setStatus] = useState("");
@@ -82,11 +89,16 @@ export function DocumentsBrowser({
             {
               key: "job",
               header: "Job",
-              render: (d: DocumentCard) => (
-                <Link href={`/jobs/${d.jobId}`} className="text-brand-teal underline">
-                  {d.jobRef}
-                </Link>
-              ),
+              render: (d: DocumentCard) => {
+                const href = jobHrefFor(d);
+                return href ? (
+                  <Link href={href} className="text-brand-teal underline">
+                    {d.jobRef}
+                  </Link>
+                ) : (
+                  <span className="text-text-secondary">{d.jobRef}</span>
+                );
+              },
             },
             { key: "org", header: "Customer", render: (d: DocumentCard) => d.organizationName },
             {
@@ -110,7 +122,7 @@ export function DocumentsBrowser({
               render: (d: DocumentCard) =>
                 d.currentVersionId ? (
                   <a
-                    href={`/api/documents/${d.id}/versions/${d.currentVersionId}/file`}
+                    href={fileHrefFor(d)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-sm text-brand-teal underline"
