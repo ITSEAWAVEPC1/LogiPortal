@@ -8,12 +8,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/shadcn/ca
 import { StatCard } from "@/components/dashboard/StatCard";
 import { RevenueBarChart } from "@/components/dashboard/RevenueBarChart";
 import { RecentJobsTable } from "@/components/dashboard/RecentJobsTable";
+import { OnTimeDonut } from "@/components/dashboard/OnTimeDonut";
+import { CxoKpiBand } from "@/components/dashboard/CxoKpiBand";
 import { money } from "@/components/portal/portal-format";
 import {
   getDashboardStats,
+  getOnTimeStats,
   getRecentJobs,
   getRevenueByMonth,
 } from "@/lib/dashboard/queries";
+import { getCxoKpis } from "@/lib/dashboard/kpis";
+import { resolvePeriod } from "@/lib/reports/period";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -27,15 +32,19 @@ export default async function DashboardPage() {
     branchId: session.user.branchId,
   });
 
-  const [stats, revenueByMonth, recentJobs, branchName] = await Promise.all([
+  const showCxo = role === "ADMIN" || role === "BRANCH_MANAGER";
+
+  const [stats, revenueByMonth, onTime, recentJobs, branchName, cxoKpis] = await Promise.all([
     getDashboardStats(scope),
     getRevenueByMonth(scope),
+    getOnTimeStats(scope),
     getRecentJobs(scope, 8),
     scope.kind === "BRANCH" && scope.branchIds.length === 1
       ? prisma.branch
           .findUnique({ where: { id: scope.branchIds[0] }, select: { name: true } })
           .then((b) => b?.name ?? null)
       : Promise.resolve(null),
+    showCxo ? getCxoKpis(scope, resolvePeriod("YTD")) : Promise.resolve(null),
   ]);
 
   const scopeLabel =
@@ -47,6 +56,8 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-semibold text-text-primary">Dashboard</h1>
         <p className="text-sm text-text-secondary">{scopeLabel}</p>
       </div>
+
+      {showCxo && cxoKpis ? <CxoKpiBand initial={cxoKpis} /> : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -79,16 +90,27 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Revenue by month</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RevenueBarChart
-            data={revenueByMonth.map((p) => ({ month: p.month, revenue: p.revenue }))}
-          />
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Revenue by month</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RevenueBarChart
+              data={revenueByMonth.map((p) => ({ month: p.month, revenue: p.revenue }))}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>On-time delivery</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OnTimeDonut onTime={onTime.onTime} delayed={onTime.delayed} noTarget={onTime.noTarget} />
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>

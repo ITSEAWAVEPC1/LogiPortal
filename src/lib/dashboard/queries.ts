@@ -86,6 +86,34 @@ export async function getRevenueByMonth(scope: Scope): Promise<RevenueMonthPoint
   return [...buckets.values()];
 }
 
+export interface OnTimeStats {
+  onTime: number;
+  delayed: number;
+  /** delivered without an expected date to compare against */
+  noTarget: number;
+}
+
+/** On-time split over every delivered job in scope (actualDeliveryDate set). */
+export async function getOnTimeStats(scope: Scope): Promise<OnTimeStats> {
+  const rows = await prisma.job.findMany({
+    where: { ...jobScopeWhere(scope), actualDeliveryDate: { not: null } },
+    select: { expectedDeliveryDate: true, actualDeliveryDate: true },
+  });
+  let onTime = 0;
+  let delayed = 0;
+  let noTarget = 0;
+  for (const r of rows) {
+    if (!r.expectedDeliveryDate || !r.actualDeliveryDate) {
+      noTarget++;
+    } else if (r.actualDeliveryDate.getTime() <= r.expectedDeliveryDate.getTime()) {
+      onTime++;
+    } else {
+      delayed++;
+    }
+  }
+  return { onTime, delayed, noTarget };
+}
+
 export async function getRecentJobs(scope: Scope, take = 8): Promise<RecentJobRow[]> {
   const rows = await prisma.job.findMany({
     where: jobScopeWhere(scope),

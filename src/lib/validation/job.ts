@@ -152,6 +152,11 @@ export const jobAutosaveSchema = z.object({
   dutyPaidBy: str,
   // internalNotes field group.
   internalNotes: str,
+  // workflowStatus field group (Stage 10b) — delivery SLA dates. ISO date
+  // strings from <input type="date">; "" / null clears the field. The workflow
+  // step engine also writes these automatically (delivery-dates.ts).
+  expectedDeliveryDate: str,
+  actualDeliveryDate: str,
 });
 
 export type JobAutosaveInput = z.infer<typeof jobAutosaveSchema>;
@@ -186,7 +191,7 @@ export const JOB_FIELD_GROUP_KEYS = {
     "hsCode",
     "containers",
   ],
-  workflowStatus: [],
+  workflowStatus: ["expectedDeliveryDate", "actualDeliveryDate"],
   charges: ["charges", "chargesCurrency", "quotedTotal"],
   dutyPayment: ["dutyPaymentLiability", "dutyAmount", "dutyPaidBy"],
   internalNotes: ["internalNotes"],

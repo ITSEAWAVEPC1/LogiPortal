@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { stepActionSchema, validateStepData } from "@/lib/validation/workflow";
 import { nextPendingAfter, priorStepsComplete } from "@/lib/workflow/engine";
+import { deliveryDatePatchForStep, hasDeliveryDatePatch } from "@/lib/workflow/delivery-dates";
 import type { Prisma } from "@/generated/prisma/client";
 
 const TX = { timeout: 20000, maxWait: 10000 } as const;
@@ -26,7 +27,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const { action, data, note } = parsed.data;
 
-  const job = await prisma.job.findUnique({ where: { id }, select: { id: true, status: true } });
+  const job = await prisma.job.findUnique({
+    where: { id },
+    select: { id: true, status: true, shipmentType: true, actualDeliveryDate: true },
+  });
   if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (job.status !== "WORKFLOW_IN_PROGRESS" && job.status !== "COMPLETED") {
     return NextResponse.json({ error: `Workflow is not active for a job with status ${job.status}` }, { status: 409 });
@@ -75,6 +79,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         where: { id: stepId },
         data: { data: stepData, status: target.status === "PENDING" ? "IN_PROGRESS" : target.status },
       });
+      // Stage 10b — propagate a saved ETA-at-POD date to Job.expectedDeliveryDate
+      // (actualDeliveryDate is only stamped on `complete`, so isFinal is false here).
+      const patch = deliveryDatePatchForStep({
+        shipmentType: job.shipmentType,
+        stepKey: target.stepKey,
+        stepData: stepData as Record<string, unknown>,
+        isFinal: false,
+        currentActualDeliveryDate: job.actualDeliveryDate,
+      });
+      if (patch.expectedDeliveryDate) {
+        await prisma.job.update({
+          where: { id },
+          data: { expectedDeliveryDate: patch.expectedDeliveryDate },
+        });
+      }
       return NextResponse.json({ progress: updated });
     }
 
@@ -106,6 +125,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         data: { data: stepData, status: "COMPLETED", completedById: actorId, completedAt: new Date() },
       });
       await writeAudit(tx, "workflow.step.completed", { data: stepData });
+
+      // Stage 10b — derive Job.expected/actualDeliveryDate from this step.
+      const deliveryPatch = deliveryDatePatchForStep({
+        shipmentType: job.shipmentType,
+        stepKey: target.stepKey,
+        stepData: stepData as Record<string, unknown>,
+        isFinal: target.step.isFinal,
+        currentActualDeliveryDate: job.actualDeliveryDate,
+      });
+      if (hasDeliveryDatePatch(deliveryPatch)) {
+        await tx.job.update({ where: { id }, data: deliveryPatch });
+      }
+
       const next = nextPendingAfter(rows, target.sortOrder);
       if (next) {
         await tx.jobWorkflowProgress.update({ where: { id: next.id }, data: { status: "IN_PROGRESS" } });

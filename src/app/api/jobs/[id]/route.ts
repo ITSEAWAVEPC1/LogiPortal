@@ -20,6 +20,18 @@ export const JOB_DETAIL_INCLUDE = {
 
 const EDITABLE_STATUSES = ["DRAFT", "NEEDS_CORRECTION"] as const;
 
+// Stage 10b — the workflowStatus field group's only autosave keys. A PATCH
+// carrying *only* these is a delivery-date correction and is allowed on an
+// in-progress / completed job too (not just DRAFT / NEEDS_CORRECTION).
+const DELIVERY_DATE_KEYS = ["expectedDeliveryDate", "actualDeliveryDate"] as const;
+
+function toDateOrNull(v: string | null | undefined): Date | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v.trim() === "") return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -49,15 +61,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const existing = await prisma.job.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (session.user.role !== "ADMIN" && !EDITABLE_STATUSES.includes(existing.status as (typeof EDITABLE_STATUSES)[number])) {
-    return NextResponse.json({ error: `Cannot edit a job with status ${existing.status}` }, { status: 409 });
-  }
-
   const parsed = jobAutosaveSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ error: "Validation failed", issues: parsed.error.issues }, { status: 400 });
   }
   const d = parsed.data;
+
+  const sentKeys = Object.keys(d);
+  const deliveryDatesOnly =
+    sentKeys.length > 0 && sentKeys.every((k) => (DELIVERY_DATE_KEYS as readonly string[]).includes(k));
+
+  if (
+    session.user.role !== "ADMIN" &&
+    !deliveryDatesOnly &&
+    !EDITABLE_STATUSES.includes(existing.status as (typeof EDITABLE_STATUSES)[number])
+  ) {
+    return NextResponse.json({ error: `Cannot edit a job with status ${existing.status}` }, { status: 409 });
+  }
+
   const access = await getJobFieldAccess(session.user.role);
 
   const jobData: Prisma.JobUpdateInput = {};
@@ -100,6 +121,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   if (access.internalNotes === "EDIT") {
     jobData.internalNotes = d.internalNotes;
+  }
+  if (access.workflowStatus === "EDIT") {
+    const expected = toDateOrNull(d.expectedDeliveryDate);
+    const actual = toDateOrNull(d.actualDeliveryDate);
+    if (expected !== undefined) jobData.expectedDeliveryDate = expected;
+    if (actual !== undefined) jobData.actualDeliveryDate = actual;
   }
 
   const job = await prisma.$transaction(

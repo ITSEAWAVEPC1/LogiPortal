@@ -88,6 +88,8 @@ export interface JobDetail {
   dutyAmount?: number | null;
   dutyPaidBy?: string | null;
   internalNotes?: string | null;
+  expectedDeliveryDate?: string | Date | null;
+  actualDeliveryDate?: string | Date | null;
   shipperDetail?: RawParty | null;
   consigneeDetail?: RawParty | null;
   notifyPartyDetail?: RawParty | null;
@@ -122,10 +124,18 @@ interface FormState {
   dutyAmount: number | null;
   dutyPaidBy: string;
   internalNotes: string;
+  expectedDeliveryDate: string;
+  actualDeliveryDate: string;
 }
 
 function numOrNull(raw: string): number | null {
   return raw === "" ? null : Number(raw);
+}
+
+function toDateInput(v: string | Date | null | undefined): string {
+  if (!v) return "";
+  const d = typeof v === "string" ? new Date(v) : v;
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
 }
 
 function buildInitialState(job: JobDetail): FormState {
@@ -166,6 +176,8 @@ function buildInitialState(job: JobDetail): FormState {
     dutyAmount: job.dutyAmount ?? null,
     dutyPaidBy: job.dutyPaidBy ?? "",
     internalNotes: job.internalNotes ?? "",
+    expectedDeliveryDate: toDateInput(job.expectedDeliveryDate),
+    actualDeliveryDate: toDateInput(job.actualDeliveryDate),
   };
 }
 
@@ -218,6 +230,8 @@ function toAutosavePayload(f: FormState) {
     dutyAmount: f.dutyAmount,
     dutyPaidBy: f.dutyPaidBy || null,
     internalNotes: f.internalNotes || null,
+    expectedDeliveryDate: f.expectedDeliveryDate || null,
+    actualDeliveryDate: f.actualDeliveryDate || null,
   };
 }
 
@@ -569,6 +583,31 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
               disabled={groupDisabled("dutyPayment")}
             />
           </div>
+        </Card>
+      )}
+
+      {canGroup("workflowStatus") && (
+        <Card className="mb-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-secondary">Delivery</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Expected Delivery Date"
+              type="date"
+              value={form.expectedDeliveryDate}
+              onChange={(e) => set("expectedDeliveryDate", e.target.value)}
+              disabled={groupDisabled("workflowStatus")}
+            />
+            <Input
+              label="Actual Delivery Date"
+              type="date"
+              value={form.actualDeliveryDate}
+              onChange={(e) => set("actualDeliveryDate", e.target.value)}
+              disabled={groupDisabled("workflowStatus")}
+            />
+          </div>
+          <p className="mt-2 text-xs text-text-tertiary">
+            Auto-filled from the ETA-at-POD and Delivered workflow steps. On-time = actual on or before expected.
+          </p>
         </Card>
       )}
 

@@ -1026,6 +1026,14 @@ model Job {
   // Internal notes / audit trail field group.
   internalNotes String?
 
+  // Stage 10b — delivery SLA tracking, part of the workflowStatus field group.
+  // expectedDeliveryDate is seeded from the ETA-at-POD workflow step
+  // (eta_discharge_port / export_eta_to_pod) and editable by ADMIN/BM/DOER.
+  // actualDeliveryDate is stamped when the final ("Delivered") step completes.
+  // On-time = actualDeliveryDate <= expectedDeliveryDate (both set).
+  expectedDeliveryDate DateTime?
+  actualDeliveryDate   DateTime?
+
   // Traceability: which bulk-import batch created this row, if any.
   importBatchId String?
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
@@ -1051,6 +1059,8 @@ model Job {
   @@index([status])
   @@index([shipmentType])
   @@index([createdById])
+  // Stage 10b — branch performance / revenue reports bucket by (branch, createdAt).
+  @@index([branchId, createdAt])
   @@map("jobs")
 }
 
