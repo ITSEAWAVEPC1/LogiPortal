@@ -9,6 +9,9 @@ import {
   resolveViewerOrgId,
   serializeDocument,
 } from "@/lib/documents/document-service";
+import { formatJobRef } from "@/lib/validation/job";
+import { fireAfterResponse } from "@/lib/notifications/fire";
+import { documentShared } from "@/lib/notifications/events";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -41,7 +44,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const existing = await prisma.document.findUnique({
     where: { id },
-    select: { id: true, status: true, createdById: true, isActive: true },
+    select: {
+      id: true,
+      status: true,
+      createdById: true,
+      isActive: true,
+      title: true,
+      sharedWithCustomer: true,
+      job: {
+        select: {
+          id: true,
+          organizationId: true,
+          referenceNo: true,
+          sequenceNumber: true,
+          createdAt: true,
+        },
+      },
+    },
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -73,6 +92,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   await prisma.document.update({ where: { id }, data });
+
+  // Stage 10c — notify the customer only on a false -> true share transition.
+  if (data.sharedWithCustomer === true && existing.sharedWithCustomer === false && existing.job) {
+    fireAfterResponse(
+      await documentShared({
+        documentId: id,
+        jobId: existing.job.id,
+        jobRef: formatJobRef(existing.job),
+        organizationId: existing.job.organizationId,
+        docTitle: patch.title ?? existing.title,
+        actorId,
+      }),
+    );
+  }
+
   const full = await prisma.document.findUnique({ where: { id }, select: DOCUMENT_DETAIL_SELECT });
   return NextResponse.json({ document: serializeDocument(full!) });
 }

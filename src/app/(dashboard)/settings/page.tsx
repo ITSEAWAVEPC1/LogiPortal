@@ -50,6 +50,14 @@ export default async function SettingsPage() {
               </p>
             </Card>
           </Link>
+          <Link href="/settings/notifications">
+            <Card className="transition-colors hover:border-brand-teal">
+              <h2 className="text-sm font-semibold text-text-primary">Notification preferences</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Your own in-app / email notification channels and per-event mutes.
+              </p>
+            </Card>
+          </Link>
         </div>
       </div>
     );

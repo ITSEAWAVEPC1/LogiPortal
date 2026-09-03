@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
-import { reviewSchema } from "@/lib/validation/quotation";
+import { formatQuotationRef, reviewSchema } from "@/lib/validation/quotation";
+import { fireAfterResponse } from "@/lib/notifications/fire";
+import { quotationReviewed } from "@/lib/notifications/events";
 
 // Branch Manager's approval gate: PENDING_APPROVAL -> APPROVED or
 // NEEDS_CORRECTION. On approve, also stamps the *version* (approvedById/At)
@@ -52,6 +54,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     });
   });
+
+  fireAfterResponse(
+    quotationReviewed({
+      quotationId: id,
+      quotationRef: formatQuotationRef(quotation),
+      decision: approve ? "approved" : "needs_correction",
+      createdById: quotation.createdById,
+      actorId: session.user.id,
+      note: parsed.data.note,
+    }),
+  );
 
   return NextResponse.json({ quotation: updated });
 }

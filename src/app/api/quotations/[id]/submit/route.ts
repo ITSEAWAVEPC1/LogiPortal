@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
+import { formatQuotationRef } from "@/lib/validation/quotation";
+import { fireAfterResponse } from "@/lib/notifications/fire";
+import { quotationSubmitted } from "@/lib/notifications/events";
 
 // Strict submit transition, DRAFT|NEEDS_CORRECTION -> PENDING_APPROVAL.
 // Re-validates from the DB's current state (the current version must have
@@ -30,5 +33,15 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   }
 
   const updated = await prisma.quotation.update({ where: { id }, data: { status: "PENDING_APPROVAL" } });
+
+  fireAfterResponse(
+    await quotationSubmitted({
+      quotationId: id,
+      quotationRef: formatQuotationRef(quotation),
+      branchId: quotation.branchId,
+      actorId: session.user.id,
+    }),
+  );
+
   return NextResponse.json({ quotation: updated });
 }

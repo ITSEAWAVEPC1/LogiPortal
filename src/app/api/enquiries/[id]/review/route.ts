@@ -3,6 +3,9 @@ import { z } from "zod";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
+import { formatEnquiryRef } from "@/lib/validation/enquiry";
+import { fireAfterResponse } from "@/lib/notifications/fire";
+import { enquiryReviewed } from "@/lib/notifications/events";
 
 const reviewSchema = z.object({
   decision: z.enum(["approve", "needs_correction"]),
@@ -45,6 +48,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       reviewNote: parsed.data.note ?? null,
     },
   });
+
+  fireAfterResponse(
+    enquiryReviewed({
+      enquiryId: id,
+      enquiryRef: formatEnquiryRef(enquiry),
+      decision: parsed.data.decision === "approve" ? "ready" : "needs_correction",
+      doerId: enquiry.doerId,
+      actorId: session.user.id,
+      note: parsed.data.note,
+    }),
+  );
 
   return NextResponse.json({ enquiry: updated });
 }

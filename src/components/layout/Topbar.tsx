@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
-import { Bell, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { ROLE_LABELS, type Role } from "@/lib/permissions/roles";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,13 +51,7 @@ export function Topbar({ userName, role, branches }: TopbarProps) {
             ))}
           </select>
         )}
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="rounded-md border border-border-subtle p-2 text-text-secondary hover:bg-background"
-        >
-          <Bell className="size-4" />
-        </button>
+        <NotificationBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-md border border-border-subtle px-3 py-1.5 text-left text-sm hover:bg-background focus:outline-none focus:ring-2 focus:ring-brand-teal">

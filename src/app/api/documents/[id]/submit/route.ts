@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { getDocumentAccess } from "@/lib/permissions/document-access";
 import { DOCUMENT_DETAIL_SELECT, serializeDocument } from "@/lib/documents/document-service";
+import { formatJobRef } from "@/lib/validation/job";
+import { fireAfterResponse } from "@/lib/notifications/fire";
+import { documentSubmitted } from "@/lib/notifications/events";
 
 // Creator (or Admin) hands a DRAFT/REJECTED document to the Branch Manager for
 // the §4.3 approval gate.
@@ -16,7 +19,16 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   const doc = await prisma.document.findUnique({
     where: { id },
-    select: { id: true, status: true, createdById: true, isActive: true },
+    select: {
+      id: true,
+      status: true,
+      createdById: true,
+      isActive: true,
+      title: true,
+      job: {
+        select: { id: true, branchId: true, referenceNo: true, sequenceNumber: true, createdAt: true },
+      },
+    },
   });
   if (!doc || !doc.isActive) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -30,6 +42,20 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   }
 
   await prisma.document.update({ where: { id }, data: { status: "PENDING_APPROVAL", reviewNote: null } });
+
+  if (doc.job) {
+    fireAfterResponse(
+      await documentSubmitted({
+        documentId: id,
+        jobId: doc.job.id,
+        jobRef: formatJobRef(doc.job),
+        branchId: doc.job.branchId,
+        docTitle: doc.title,
+        actorId,
+      }),
+    );
+  }
+
   const full = await prisma.document.findUnique({ where: { id }, select: DOCUMENT_DETAIL_SELECT });
   return NextResponse.json({ document: serializeDocument(full!) });
 }

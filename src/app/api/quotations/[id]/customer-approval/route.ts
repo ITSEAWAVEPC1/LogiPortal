@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
-import { customerApprovalSchema } from "@/lib/validation/quotation";
+import { customerApprovalSchema, formatQuotationRef } from "@/lib/validation/quotation";
+import { fireAfterResponse } from "@/lib/notifications/fire";
+import { quotationCustomerApproved } from "@/lib/notifications/events";
 
 // Customer approval recorded manually by Sales (Section 5.3 step 4) — not a
 // customer-portal action, since Customer row-scoping doesn't exist until
@@ -41,6 +43,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       customerApprovedNote: parsed.data.note ?? null,
     },
   });
+
+  fireAfterResponse(
+    quotationCustomerApproved({
+      quotationId: id,
+      quotationRef: formatQuotationRef(quotation),
+      createdById: quotation.createdById,
+      actorId: session.user.id,
+    }),
+  );
 
   return NextResponse.json({ quotation: updated });
 }

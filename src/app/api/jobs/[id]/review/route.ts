@@ -4,6 +4,9 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { attachWorkflow } from "@/lib/workflow/engine";
+import { formatJobRef } from "@/lib/validation/job";
+import { fireAfterResponse } from "@/lib/notifications/fire";
+import { jobWorkflowStarted } from "@/lib/notifications/events";
 
 const reviewSchema = z.object({
   decision: z.enum(["approve", "needs_correction"]),
@@ -70,6 +73,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { job: u, workflow: attach };
     },
     { timeout: 20000, maxWait: 10000 },
+  );
+
+  fireAfterResponse(
+    await jobWorkflowStarted({
+      jobId: id,
+      jobRef: formatJobRef(job),
+      branchId: job.branchId,
+      jobCreatedById: job.createdById,
+      actorId: session.user.id,
+    }),
   );
 
   return NextResponse.json({ job: updated, workflow });

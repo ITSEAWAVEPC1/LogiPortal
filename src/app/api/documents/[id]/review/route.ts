@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { documentReviewSchema } from "@/lib/validation/document";
 import { DOCUMENT_DETAIL_SELECT, serializeDocument } from "@/lib/documents/document-service";
+import { formatJobRef } from "@/lib/validation/job";
+import { fireAfterResponse } from "@/lib/notifications/fire";
+import { documentReviewed } from "@/lib/notifications/events";
 
 // §4.3 Documents row: Branch Manager approves. approve -> APPROVED (+ stamp);
 // reject -> REJECTED (+ note, clears any share/approval stamp).
@@ -22,7 +25,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const doc = await prisma.document.findUnique({
     where: { id },
-    select: { id: true, status: true, isActive: true },
+    select: {
+      id: true,
+      status: true,
+      isActive: true,
+      title: true,
+      createdById: true,
+      job: { select: { id: true, referenceNo: true, sequenceNumber: true, createdAt: true } },
+    },
   });
   if (!doc || !doc.isActive) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (doc.status !== "DRAFT" && doc.status !== "PENDING_APPROVAL") {
@@ -42,6 +52,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             sharedWithCustomer: false,
           },
   });
+
+  if (doc.job) {
+    fireAfterResponse(
+      documentReviewed({
+        documentId: id,
+        jobId: doc.job.id,
+        jobRef: formatJobRef(doc.job),
+        decision: action === "approve" ? "approved" : "rejected",
+        createdById: doc.createdById,
+        docTitle: doc.title,
+        actorId,
+        note: note ?? undefined,
+      }),
+    );
+  }
 
   const full = await prisma.document.findUnique({ where: { id }, select: DOCUMENT_DETAIL_SELECT });
   return NextResponse.json({ document: serializeDocument(full!) });

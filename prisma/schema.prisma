@@ -98,6 +98,10 @@ model User {
   // Stage 9 — customer portal cross-organization access attempts
   portalAccessLogs PortalAccessLog[]
 
+  // Stage 10c — notifications
+  notifications          Notification[]           @relation("UserNotifications")
+  notificationPreference NotificationPreference?  @relation("UserNotificationPreference")
+
   @@map("users")
 }
 
@@ -1455,4 +1459,87 @@ model PortalAccessLog {
   @@index([userId])
   @@index([createdAt])
   @@map("portal_access_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Stage 10c — Notifications
+//
+// One Notification row is BOTH the in-app item and the email-outbox row (the
+// email* columns are the durable queue). Drained after a mutating request via
+// Next's after() and, as a durability backstop, by GET /api/cron/notifications.
+// Email is dark until RESEND_API_KEY + NOTIFICATIONS_EMAIL_ENABLED are set
+// (src/lib/config/flags.ts); until then rows are created with emailStatus =
+// SKIPPED. No SMS.
+// ---------------------------------------------------------------------------
+
+enum NotificationType {
+  WORKFLOW_STEP_SUBMITTED
+  WORKFLOW_STEP_APPROVED
+  WORKFLOW_STEP_REJECTED
+  JOB_WORKFLOW_STARTED
+  JOB_COMPLETED
+  ENQUIRY_READY
+  ENQUIRY_NEEDS_CORRECTION
+  QUOTATION_SUBMITTED
+  QUOTATION_APPROVED
+  QUOTATION_NEEDS_CORRECTION
+  QUOTATION_SENT
+  QUOTATION_CUSTOMER_APPROVED
+  DOCUMENT_SUBMITTED
+  DOCUMENT_APPROVED
+  DOCUMENT_REJECTED
+  DOCUMENT_SHARED
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model Notification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("UserNotifications", fields: [userId], references: [id])
+
+  type     NotificationType
+  title    String
+  body     String
+  linkPath String?
+  data     Json?
+
+  readAt DateTime?
+
+  // email outbox / retry queue
+  emailStatus   NotificationDeliveryStatus @default(PENDING)
+  emailAttempts Int                        @default(0)
+  emailError    String?
+  nextAttemptAt DateTime?
+  emailSentAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, readAt])
+  @@index([emailStatus, nextAttemptAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation("UserNotificationPreference", fields: [userId], references: [id], onDelete: Cascade)
+
+  inAppEnabled Boolean @default(true)
+  emailEnabled Boolean @default(true)
+  // JSON array of NotificationType values the user has muted
+  mutedTypes   Json    @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notification_preferences")
 }

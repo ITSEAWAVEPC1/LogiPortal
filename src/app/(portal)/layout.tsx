@@ -2,6 +2,7 @@ import Image from "next/image";
 import { Card } from "@/components/ui";
 import { PortalNav } from "@/components/portal/PortalNav";
 import { PortalSignOut } from "@/components/portal/PortalSignOut";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { getPortalContext } from "@/lib/portal/guard";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -17,8 +18,13 @@ export default async function PortalLayout({ children }: { children: React.React
         </div>
         <PortalNav />
         <div className="border-t border-border-subtle px-4 py-3">
-          <p className="truncate text-sm font-medium text-text-primary">{ctx.userName}</p>
-          <p className="mb-2 text-xs text-text-tertiary">Customer portal</p>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-text-primary">{ctx.userName}</p>
+              <p className="text-xs text-text-tertiary">Customer portal</p>
+            </div>
+            <NotificationBell viewAllHref="" />
+          </div>
           <PortalSignOut />
         </div>
       </aside>

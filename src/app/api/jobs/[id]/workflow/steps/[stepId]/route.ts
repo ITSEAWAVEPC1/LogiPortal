@@ -5,6 +5,13 @@ import { can } from "@/lib/permissions/capabilities";
 import { stepActionSchema, validateStepData } from "@/lib/validation/workflow";
 import { nextPendingAfter, priorStepsComplete } from "@/lib/workflow/engine";
 import { deliveryDatePatchForStep, hasDeliveryDatePatch } from "@/lib/workflow/delivery-dates";
+import { formatJobRef } from "@/lib/validation/job";
+import { fireAfterResponse } from "@/lib/notifications/fire";
+import {
+  jobCompleted,
+  workflowStepReviewed,
+  workflowStepSubmitted,
+} from "@/lib/notifications/events";
 import type { Prisma } from "@/generated/prisma/client";
 
 const TX = { timeout: 20000, maxWait: 10000 } as const;
@@ -29,9 +36,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const job = await prisma.job.findUnique({
     where: { id },
-    select: { id: true, status: true, shipmentType: true, actualDeliveryDate: true },
+    select: {
+      id: true,
+      status: true,
+      shipmentType: true,
+      actualDeliveryDate: true,
+      branchId: true,
+      organizationId: true,
+      createdById: true,
+      referenceNo: true,
+      sequenceNumber: true,
+      createdAt: true,
+    },
   });
   if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const jobRef = formatJobRef(job);
   if (job.status !== "WORKFLOW_IN_PROGRESS" && job.status !== "COMPLETED") {
     return NextResponse.json({ error: `Workflow is not active for a job with status ${job.status}` }, { status: 409 });
   }
@@ -109,6 +128,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await writeAudit(tx, "workflow.step.submitted", { data: stepData });
         return u;
       }, TX);
+      if (approverRole) {
+        fireAfterResponse(
+          await workflowStepSubmitted({
+            jobId: id,
+            jobRef,
+            branchId: job.branchId,
+            stepLabel: target.label,
+            approverRole,
+            actorId,
+          }),
+        );
+      }
       return NextResponse.json({ progress: updated });
     }
 
@@ -150,6 +181,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       return { progress: u, jobCompleted };
     }, TX);
+    if (result.jobCompleted) {
+      fireAfterResponse(
+        await jobCompleted({
+          jobId: id,
+          jobRef,
+          branchId: job.branchId,
+          organizationId: job.organizationId,
+          jobCreatedById: job.createdById,
+          actorId,
+        }),
+      );
+    }
     return NextResponse.json(result);
   }
 
@@ -213,6 +256,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
         return u;
       }, TX);
+      fireAfterResponse(
+        await workflowStepReviewed({
+          jobId: id,
+          jobRef,
+          branchId: job.branchId,
+          stepLabel: target.label,
+          decision: "approved",
+          ownerUserId: target.completedById,
+          nextOwnerRole: nextPendingAfter(rows, target.sortOrder)?.step.ownerRole ?? null,
+          actorId,
+          note: note ?? undefined,
+        }),
+      );
       return NextResponse.json({ progress: updated });
     }
 
@@ -224,6 +280,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await writeAudit(tx, "workflow.step.rejected", { note: note as string });
       return u;
     }, TX);
+    fireAfterResponse(
+      await workflowStepReviewed({
+        jobId: id,
+        jobRef,
+        branchId: job.branchId,
+        stepLabel: target.label,
+        decision: "rejected",
+        ownerUserId: target.completedById,
+        nextOwnerRole: null,
+        actorId,
+        note: note ?? undefined,
+      }),
+    );
     return NextResponse.json({ progress: updated });
   }
 
