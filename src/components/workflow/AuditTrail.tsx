@@ -2,32 +2,18 @@
 
 import { useState } from "react";
 import { Card } from "@/components/ui";
+import { jobAuditActionLabel, jobAuditNote } from "@/lib/audit/labels";
 import type { WorkflowAuditEntry } from "./types";
-
-const ACTION_LABEL: Record<string, string> = {
-  "workflow.attached": "attached the workflow",
-  "workflow.step.submitted": "submitted for approval",
-  "workflow.step.completed": "completed",
-  "workflow.step.approved": "approved",
-  "workflow.step.rejected": "rejected",
-  "workflow.step.reverted": "reverted",
-  "workflow.step.skipped": "skipped",
-  "job.completed": "marked the job delivered",
-};
 
 function describe(entry: WorkflowAuditEntry): string {
   const who = entry.actor?.name ?? "Someone";
-  const what = ACTION_LABEL[entry.action] ?? entry.action;
+  const what = jobAuditActionLabel(entry.action);
   const step = entry.stepKey && entry.action.startsWith("workflow.step.") ? ` "${entry.stepKey.replace(/_/g, " ")}"` : "";
   return `${who} ${what}${step}`;
 }
 
 function note(entry: WorkflowAuditEntry): string | null {
-  const d = entry.detail;
-  if (d && typeof d === "object" && "note" in d && typeof (d as { note: unknown }).note === "string") {
-    return (d as { note: string }).note;
-  }
-  return null;
+  return jobAuditNote(entry.detail);
 }
 
 export function AuditTrail({ entries }: { entries: WorkflowAuditEntry[] }) {

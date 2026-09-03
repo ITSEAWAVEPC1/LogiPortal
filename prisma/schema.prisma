@@ -118,6 +118,9 @@ model Session {
   createdAt DateTime @default(now())
   expiresAt DateTime
 
+  // Stage 10d — the /audit "Logins" tab orders by createdAt; userId for lookups.
+  @@index([userId])
+  @@index([createdAt])
   @@map("sessions")
 }
 
@@ -1065,6 +1068,8 @@ model Job {
   @@index([createdById])
   // Stage 10b — branch performance / revenue reports bucket by (branch, createdAt).
   @@index([branchId, createdAt])
+  // Stage 10d — the revenue report's per-customer filter.
+  @@index([organizationId, createdAt])
   @@map("jobs")
 }
 
@@ -1282,6 +1287,8 @@ model JobAuditLog {
 
   @@index([jobId])
   @@index([createdAt])
+  // Stage 10d — the /audit "Job activity" tab filters by actor.
+  @@index([actorId])
   @@map("job_audit_logs")
 }
 

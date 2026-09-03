@@ -12,6 +12,7 @@ export type ScreenKey =
   | "customers"
   | "documents"
   | "reports"
+  | "audit"
   | "accounts"
   | "dataImport"
   | "settings";
@@ -42,6 +43,7 @@ export const NAV_ITEMS: {
   { key: "customers", label: "Customers", href: "/customers", builtInStage: 1 },
   { key: "documents", label: "Documents", href: "/documents", builtInStage: 7 },
   { key: "reports", label: "Reports", href: "/reports", builtInStage: 10 },
+  { key: "audit", label: "Audit Trail", href: "/audit", builtInStage: 10 },
   { key: "accounts", label: "Accounts", href: "/accounts", builtInStage: 4 },
   { key: "dataImport", label: "Data Import", href: "/data-import", builtInStage: 1 },
   { key: "settings", label: "Settings", href: "/settings", builtInStage: 1 },
@@ -61,6 +63,7 @@ const SCREEN_ACCESS: Record<Role, ScreenKey[]> = {
     "customers",
     "documents",
     "reports",
+    "audit",
     "accounts",
     "dataImport",
     "settings",
@@ -73,6 +76,7 @@ const SCREEN_ACCESS: Record<Role, ScreenKey[]> = {
     "customers",
     "documents",
     "reports",
+    "audit",
     "accounts",
     "settings",
   ],
