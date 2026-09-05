@@ -2,7 +2,7 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { QuotationPdfData } from "./types";
 
 const CATEGORY_LABEL: Record<QuotationPdfData["lineItems"][number]["category"], string> = {
-  FREIGHT: "Freight Charges",
+  FREIGHT: "Freight Booking Charges",
   CUSTOMS_CLEARANCE: "Customs Clearance Charges",
   TRANSPORTATION: "Transportation Charges",
   REIMBURSEMENT: "Reimbursement Charges",

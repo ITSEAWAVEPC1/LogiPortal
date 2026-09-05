@@ -4,7 +4,7 @@ import { docStyles as s, orDash } from "./styles";
 import { DocFooter, DocHeader } from "./Shared";
 
 const CATEGORY_LABEL: Record<string, string> = {
-  FREIGHT: "Freight Charges",
+  FREIGHT: "Freight Booking Charges",
   CUSTOMS_CLEARANCE: "Customs Clearance Charges",
   TRANSPORTATION: "Transportation Charges",
   REIMBURSEMENT: "Reimbursement Charges",

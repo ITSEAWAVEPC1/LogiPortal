@@ -2,7 +2,7 @@ import { Card } from "@/components/ui";
 import type { QuotationPdfData } from "@/lib/pdf/types";
 
 const CATEGORY_LABEL: Record<QuotationPdfData["lineItems"][number]["category"], string> = {
-  FREIGHT: "Freight Charges",
+  FREIGHT: "Freight Booking Charges",
   CUSTOMS_CLEARANCE: "Customs Clearance Charges",
   TRANSPORTATION: "Transportation Charges",
   REIMBURSEMENT: "Reimbursement Charges",

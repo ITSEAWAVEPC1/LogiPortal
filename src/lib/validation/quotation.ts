@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 export const QUOTATION_CHARGE_CATEGORY_OPTIONS = [
-  { value: "FREIGHT", label: "Freight Charges" },
+  // "Freight Booking Charges" per the Stage 14d stakeholder ask — the enum
+  // value FREIGHT is unchanged.
+  { value: "FREIGHT", label: "Freight Booking Charges" },
   { value: "CUSTOMS_CLEARANCE", label: "Customs Clearance Charges" },
   { value: "TRANSPORTATION", label: "Transportation Charges" },
   { value: "REIMBURSEMENT", label: "Reimbursement Charges" },

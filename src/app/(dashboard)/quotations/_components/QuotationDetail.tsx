@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge, Button, Card, StepTracker, type Step } from "@/components/ui";
 import { formatEnquiryRef } from "@/lib/validation/enquiry";
-import { formatQuotationRef, type QuotationLineItemInput } from "@/lib/validation/quotation";
+import { QUOTATION_CHARGE_CATEGORY_OPTIONS, formatQuotationRef, type QuotationLineItemInput } from "@/lib/validation/quotation";
 import { useAutosave } from "@/lib/hooks/useAutosave";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { CostSheetEditor, type CostSheetState } from "./CostSheetEditor";
@@ -240,33 +240,51 @@ export function QuotationDetail({
   }
 
   async function handleCopyForEmail() {
-    const rows = items
-      .map(
-        (item, i) => `<tr>
-          <td>${i + 1}</td>
-          <td>${escapeHtml(item.description)}</td>
-          <td>${item.currency}</td>
-          <td>${item.quantity ?? ""}</td>
-          <td>${item.rate ?? ""}</td>
-          <td>${item.rateInr ?? ""}</td>
-          <td>${escapeHtml(item.remarks ?? "")}</td>
-          <td>${item.amount.toFixed(2)}</td>
+    // Stage 14d — grouped by charge category (canonical order, non-empty only),
+    // lettered a) b) c), items numbered 1. 2. within each section, full
+    // columns (Particulars / Qty / Rate / Amount).
+    const money = (n: number) =>
+      `INR ${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const grandTotal = items.reduce((s, i) => s + (i.amount || 0), 0);
+
+    const sections = QUOTATION_CHARGE_CATEGORY_OPTIONS.map(({ value, label }) => ({
+      label,
+      lines: items.filter((i) => i.category === value),
+    })).filter((s) => s.lines.length > 0);
+
+    const letter = (i: number) => String.fromCharCode(97 + i); // a, b, c, ...
+
+    const textBlocks = sections.map((sec, si) => {
+      const head = `${letter(si)}) ${sec.label}`;
+      const lines = sec.lines.map((item, li) => {
+        const qtyRate =
+          item.quantity != null && item.rate != null ? `   ${item.quantity} x ${item.rate} = ` : "   ";
+        return `   ${li + 1}. ${item.description}${qtyRate}${money(item.amount)}`;
+      });
+      return [head, ...lines].join("\n");
+    });
+    const text = `${textBlocks.join("\n\n")}\n\nTotal: ${money(grandTotal)}`;
+
+    const htmlSections = sections
+      .map((sec, si) => {
+        const header = `<tr><td colspan="4" style="padding-top:8px"><b>${letter(si)}) ${escapeHtml(sec.label)}</b></td></tr>`;
+        const lineRows = sec.lines
+          .map(
+            (item, li) => `<tr>
+          <td style="padding:2px 8px">${li + 1}.</td>
+          <td style="padding:2px 8px">${escapeHtml(item.description)}</td>
+          <td style="padding:2px 8px;text-align:right">${item.quantity != null && item.rate != null ? `${item.quantity} x ${item.rate}` : ""}</td>
+          <td style="padding:2px 8px;text-align:right">${money(item.amount)}</td>
         </tr>`,
-      )
+          )
+          .join("");
+        return header + lineRows;
+      })
       .join("");
-    const html = `<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse">
-      <thead><tr>
-        <th>Sr No</th><th>Particulars</th><th>Currency</th><th>Qty</th><th>Rate</th><th>Rate INR</th><th>Remarks</th><th>Amount (INR)</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr><td colspan="7" style="text-align:right"><b>Total</b></td><td><b>INR ${items.reduce((s, i) => s + (i.amount || 0), 0).toFixed(2)}</b></td></tr></tfoot>
+    const html = `<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px">
+      <tbody>${htmlSections}</tbody>
+      <tfoot><tr><td colspan="3" style="padding:8px 8px 2px;text-align:right"><b>Total</b></td><td style="padding:8px 8px 2px;text-align:right"><b>${money(grandTotal)}</b></td></tr></tfoot>
     </table>`;
-    const text = items
-      .map(
-        (item, i) =>
-          `${i + 1}\t${item.description}\t${item.currency}\t${item.quantity ?? ""}\t${item.rate ?? ""}\t${item.rateInr ?? ""}\t${item.remarks ?? ""}\t${item.amount.toFixed(2)}`,
-      )
-      .join("\n");
 
     try {
       if (typeof ClipboardItem !== "undefined") {
