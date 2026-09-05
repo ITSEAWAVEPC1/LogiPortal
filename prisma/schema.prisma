@@ -334,6 +334,13 @@ enum TransportDeliveryType {
   DESTUFF
 }
 
+// Stakeholder field-rework addition (post-Stage-2) — L x W x H dimension
+// entry replacing the free-text "dimensions" string.
+enum DimensionUnit {
+  MM
+  CM
+}
+
 model Enquiry {
   id     String        @id @default(cuid())
   status EnquiryStatus @default(DRAFT)
@@ -403,17 +410,30 @@ model EnquiryFreightDetail {
   enquiryId String  @unique
   enquiry   Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
 
-  incoterm        String?
+  incoterm String?
+
+  // Deprecated free-text — superseded by portOfLoadingId/portOfDischargeId
+  // (Port master list). Left in place, unused, per the additive-only
+  // convention; still populated on old rows created before the rework.
   portOfLoading   String?
   portOfDischarge String?
-  cargoMode       CargoMode?
 
-  // LCL & Air
-  packageCount Int?
-  dimensions   String?
-  weight       Float?
+  portOfLoadingId String?
+  portOfLoadingPort   Port? @relation("FreightPortOfLoading", fields: [portOfLoadingId], references: [id])
+  portOfDischargeId String?
+  portOfDischargePort Port? @relation("FreightPortOfDischarge", fields: [portOfDischargeId], references: [id])
 
-  // FCL
+  // Only shown/relevant when incoterm is EXW/DDP/DDU/DAP; never mandatory —
+  // leaving it blank never blocks submission even when shown.
+  finalDestinationAddress String?
+
+  cargoMode CargoMode?
+
+  // Deprecated flat LCL/FCL fields — superseded by packages[] (repeatable
+  // rows, one per package/container). Left in place, unused.
+  packageCount   Int?
+  dimensions     String?
+  weight         Float?
   fclWeight      Float?
   containerType  String?
   containerCount Int?
@@ -424,10 +444,37 @@ model EnquiryFreightDetail {
   odcPackageCount     Int?
   odcPerPackageWeight Float?
 
+  packages EnquiryFreightPackage[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("enquiry_freight_details")
+}
+
+// Repeatable package/container row for Freight Forwarding's LCL & Air / FCL
+// block (add/remove via a UI "+ Add package" button, mirroring the Quotation
+// line-item editor). One row per package (LCL & Air) or per container (FCL,
+// so weight is entered per container). Dimensions are always optional.
+model EnquiryFreightPackage {
+  id                     String               @id @default(cuid())
+  enquiryFreightDetailId String
+  enquiryFreightDetail   EnquiryFreightDetail @relation(fields: [enquiryFreightDetailId], references: [id], onDelete: Cascade)
+
+  length        Float?
+  width         Float?
+  height        Float?
+  dimensionUnit DimensionUnit?
+  weight        Float?
+  // FCL only — e.g. "40HC"/"20GP". Not shown/used for LCL & Air rows.
+  containerType String?
+  sortOrder     Int            @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enquiryFreightDetailId])
+  @@map("enquiry_freight_packages")
 }
 
 model EnquiryCustomsDetail {
@@ -435,13 +482,35 @@ model EnquiryCustomsDetail {
   enquiryId String  @unique
   enquiry   Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
 
+  // Deprecated single-value fields — superseded by commodityLines (multiple
+  // HS codes/commodities per enquiry). Left in place, unused.
   hsCode    String?
   commodity String?
+
+  commodityLines EnquiryCommodityLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("enquiry_customs_details")
+}
+
+// Repeatable HS code / commodity row (add/remove via a UI "+ Add commodity
+// line" button, mirroring the Quotation line-item editor).
+model EnquiryCommodityLine {
+  id                     String               @id @default(cuid())
+  enquiryCustomsDetailId String
+  enquiryCustomsDetail   EnquiryCustomsDetail @relation(fields: [enquiryCustomsDetailId], references: [id], onDelete: Cascade)
+
+  hsCode    String?
+  commodity String?
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enquiryCustomsDetailId])
+  @@map("enquiry_commodity_lines")
 }
 
 model EnquiryTransportDetail {
@@ -453,10 +522,15 @@ model EnquiryTransportDetail {
   destination String?
   cargoMode   CargoMode?
 
-  // LCL & Air
-  packageCount Int?
-  dimensions   String?
-  weight       Float?
+  // LCL & Air. dimensions (free-text) is deprecated — superseded by
+  // length/width/height/dimensionUnit, all always optional.
+  packageCount  Int?
+  dimensions    String?
+  weight        Float?
+  length        Float?
+  width         Float?
+  height        Float?
+  dimensionUnit DimensionUnit?
 
   // FCL — note: no container-count field here, unlike Freight Forwarding's FCL block
   fclWeight     Float?
@@ -473,6 +547,42 @@ model EnquiryTransportDetail {
   updatedAt DateTime @updatedAt
 
   @@map("enquiry_transport_details")
+}
+
+// Admin-configurable master list (Freight Forwarding's Port of Loading / Port
+// of Discharge dropdowns), same pattern as BillType.
+model Port {
+  id       String  @id @default(cuid())
+  name     String
+  code     String? @unique
+  isActive Boolean @default(true)
+
+  freightPortOfLoading   EnquiryFreightDetail[] @relation("FreightPortOfLoading")
+  freightPortOfDischarge EnquiryFreightDetail[] @relation("FreightPortOfDischarge")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ports")
+}
+
+// Admin-configurable per-service-type field visibility/requiredness for the
+// Enquiry form ("RFQ formatting" — Stage 12c). One row per (serviceType,
+// fieldKey) override; a missing row means "visible and required" (today's
+// hardcoded default), so the canonical field-key list only needs seeding
+// when an admin actually changes something — see src/lib/enquiries/field-config.ts.
+model EnquiryFieldConfig {
+  id          String      @id @default(cuid())
+  serviceType ServiceType
+  fieldKey    String
+  isVisible   Boolean     @default(true)
+  isRequired  Boolean     @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([serviceType, fieldKey])
+  @@map("enquiry_field_configs")
 }
 
 // ---------------------------------------------------------------------------
@@ -907,6 +1017,14 @@ model QuotationLineItem {
   amount      Float
   currency    String
   sortOrder   Int                     @default(0)
+
+  // Stage 12d — per-line currency conversion. exchangeRate/rateInr are only
+  // meaningful when currency != "INR" (rateInr = rate for INR rows); Amount
+  // is quantity * rateInr, so the grand total across a version's line items
+  // is always a single INR figure regardless of the currency mix per row.
+  remarks      String?
+  exchangeRate Float?
+  rateInr      Float?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

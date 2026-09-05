@@ -34,6 +34,22 @@ export default async function SettingsPage() {
               </p>
             </Card>
           </Link>
+          <Link href="/settings/ports">
+            <Card className="transition-colors hover:border-brand-teal">
+              <h2 className="text-sm font-semibold text-text-primary">Ports</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Manage the Port master used by Freight Forwarding&apos;s Port of Loading/Discharge fields.
+              </p>
+            </Card>
+          </Link>
+          <Link href="/settings/enquiry-fields">
+            <Card className="transition-colors hover:border-brand-teal">
+              <h2 className="text-sm font-semibold text-text-primary">Enquiry Field Configuration</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Control which Enquiry fields are shown/required per service type (&quot;RFQ formatting&quot;).
+              </p>
+            </Card>
+          </Link>
           <Link href="/settings/workflow-templates">
             <Card className="transition-colors hover:border-brand-teal">
               <h2 className="text-sm font-semibold text-text-primary">Workflow Templates</h2>

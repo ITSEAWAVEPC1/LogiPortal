@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Badge, Button, Card, Textarea } from "@/components/ui";
 import { formatEnquiryRef } from "@/lib/validation/enquiry";
 import { formatQuotationRef, type QuotationLineItemInput } from "@/lib/validation/quotation";
@@ -10,6 +11,26 @@ import { LineItemsEditor } from "./LineItemsEditor";
 import { ReviewModal } from "./ReviewModal";
 import { QuotationHtmlPreview } from "@/components/quotations/QuotationHtmlPreview";
 import type { QuotationPdfData } from "@/lib/pdf/types";
+
+type ChargeCategory = QuotationLineItemInput["category"];
+
+// Maps an Enquiry's serviceTypes to the charge categories its Quotation
+// should offer by default — Reimbursement is always available as a general
+// catch-all regardless of service type.
+const SERVICE_TYPE_TO_CATEGORY: Record<string, ChargeCategory> = {
+  FREIGHT_FORWARDING: "FREIGHT",
+  CUSTOMS_CLEARANCE: "CUSTOMS_CLEARANCE",
+  TRANSPORTATION: "TRANSPORTATION",
+};
+
+function availableCategoriesFor(serviceTypes: string[]): ChargeCategory[] {
+  const mapped = serviceTypes.map((s) => SERVICE_TYPE_TO_CATEGORY[s]).filter((c): c is ChargeCategory => Boolean(c));
+  return Array.from(new Set([...mapped, "REIMBURSEMENT" as ChargeCategory]));
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
+}
 
 type QuotationStatus =
   | "DRAFT"
@@ -78,31 +99,33 @@ interface QuotationDetailProps {
     versions: VersionSummary[];
     enquiries: { id: string; enquiry: EnquirySummary }[];
   };
-  currentVersion: { id: string; versionNumber: number; currency: string; totalAmount: number };
   lineItems: QuotationLineItemInput[];
   canEdit: boolean;
   canApprove: boolean;
 }
 
-export function QuotationDetail({ quotation, currentVersion, lineItems, canEdit, canApprove }: QuotationDetailProps) {
+export function QuotationDetail({ quotation, lineItems, canEdit, canApprove }: QuotationDetailProps) {
   const router = useRouter();
   const [items, setItems] = useState<QuotationLineItemInput[]>(lineItems);
-  const [currency, setCurrency] = useState(currentVersion.currency);
   const [flagBackOpen, setFlagBackOpen] = useState(false);
   const [customerNoteOpen, setCustomerNoteOpen] = useState(false);
   const [customerNote, setCustomerNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [pdfPreview, setPdfPreview] = useState<QuotationPdfData | null>(null);
+  const [expandedVersion, setExpandedVersion] = useState<number | null>(null);
+  const [versionLineItems, setVersionLineItems] = useState<Record<number, QuotationLineItemInput[]>>({});
+  const [loadingVersion, setLoadingVersion] = useState<number | null>(null);
 
   const editable = canEdit && !LINE_ITEMS_LOCKED_STATUSES.includes(quotation.status);
+  const availableCategories = availableCategoriesFor(quotation.enquiries.flatMap((qe) => qe.enquiry.serviceTypes));
 
   const { status: saveStatus } = useAutosave(
-    { currency, items: items.map((item, index) => ({ ...item, currency, sortOrder: index })) },
+    { items: items.map((item, index) => ({ ...item, sortOrder: index })) },
     async (value) => {
       const res = await fetch(`/api/quotations/${quotation.id}/line-items`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currency: value.currency, lineItems: value.items }),
+        body: JSON.stringify({ lineItems: value.items }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -112,6 +135,66 @@ export function QuotationDetail({ quotation, currentVersion, lineItems, canEdit,
     },
     { enabled: editable },
   );
+
+  async function toggleVersionHistory(versionNumber: number) {
+    if (expandedVersion === versionNumber) {
+      setExpandedVersion(null);
+      return;
+    }
+    setExpandedVersion(versionNumber);
+    if (versionLineItems[versionNumber]) return;
+    setLoadingVersion(versionNumber);
+    const res = await fetch(`/api/quotations/${quotation.id}/versions/${versionNumber}/line-items`);
+    const body = await res.json().catch(() => ({}));
+    setVersionLineItems((prev) => ({ ...prev, [versionNumber]: body.lineItems ?? [] }));
+    setLoadingVersion(null);
+  }
+
+  async function handleCopyForEmail() {
+    const rows = items
+      .map(
+        (item, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${escapeHtml(item.description)}</td>
+          <td>${item.currency}</td>
+          <td>${item.quantity ?? ""}</td>
+          <td>${item.rate ?? ""}</td>
+          <td>${item.rateInr ?? ""}</td>
+          <td>${escapeHtml(item.remarks ?? "")}</td>
+          <td>${item.amount.toFixed(2)}</td>
+        </tr>`,
+      )
+      .join("");
+    const html = `<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse">
+      <thead><tr>
+        <th>Sr No</th><th>Particulars</th><th>Currency</th><th>Qty</th><th>Rate</th><th>Rate INR</th><th>Remarks</th><th>Amount (INR)</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td colspan="7" style="text-align:right"><b>Total</b></td><td><b>INR ${items.reduce((s, i) => s + (i.amount || 0), 0).toFixed(2)}</b></td></tr></tfoot>
+    </table>`;
+    const text = items
+      .map(
+        (item, i) =>
+          `${i + 1}\t${item.description}\t${item.currency}\t${item.quantity ?? ""}\t${item.rate ?? ""}\t${item.rateInr ?? ""}\t${item.remarks ?? ""}\t${item.amount.toFixed(2)}`,
+      )
+      .join("\n");
+
+    try {
+      if (typeof ClipboardItem !== "undefined") {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
+      toast.success("Copied — paste into your email body");
+    } catch {
+      setActionError("Could not copy to clipboard");
+    }
+  }
 
   async function runAction(path: string, body?: unknown) {
     setActionError(null);
@@ -183,13 +266,7 @@ export function QuotationDetail({ quotation, currentVersion, lineItems, canEdit,
             </span>
           )}
         </div>
-        <LineItemsEditor
-          items={items}
-          onChange={setItems}
-          currency={currency}
-          onCurrencyChange={setCurrency}
-          readOnly={!editable}
-        />
+        <LineItemsEditor items={items} onChange={setItems} readOnly={!editable} availableCategories={availableCategories} />
       </Card>
 
       <Card className="flex flex-wrap items-center gap-2">
@@ -213,6 +290,9 @@ export function QuotationDetail({ quotation, currentVersion, lineItems, canEdit,
         )}
         <Button variant="ghost" onClick={handlePdfDownload}>
           Download PDF
+        </Button>
+        <Button variant="ghost" onClick={handleCopyForEmail}>
+          Copy for Email
         </Button>
       </Card>
 
@@ -259,14 +339,35 @@ export function QuotationDetail({ quotation, currentVersion, lineItems, canEdit,
         <h2 className="mb-2 text-sm font-semibold text-text-primary">Version History</h2>
         <div className="flex flex-col gap-2 text-sm">
           {quotation.versions.map((v) => (
-            <div key={v.id} className="flex justify-between border-b border-border-subtle pb-1 last:border-0">
-              <span>
-                v{v.versionNumber} — {v.createdBy.name}, {new Date(v.createdAt).toLocaleDateString()}
-              </span>
-              <span className="text-text-secondary">
-                {v.currency} {v.totalAmount.toFixed(2)}
-                {v.approvedBy ? ` · Approved by ${v.approvedBy.name}` : ""}
-              </span>
+            <div key={v.id} className="border-b border-border-subtle pb-2 last:border-0">
+              <button
+                type="button"
+                onClick={() => toggleVersionHistory(v.versionNumber)}
+                className="flex w-full justify-between py-1 text-left"
+              >
+                <span>
+                  v{v.versionNumber} — {v.createdBy.name}, {new Date(v.createdAt).toLocaleDateString()}
+                </span>
+                <span className="text-text-secondary">
+                  {v.currency} {v.totalAmount.toFixed(2)}
+                  {v.approvedBy ? ` · Approved by ${v.approvedBy.name}` : ""}
+                  {" · "}
+                  {expandedVersion === v.versionNumber ? "Hide" : "View"} line items
+                </span>
+              </button>
+              {expandedVersion === v.versionNumber && (
+                <div className="mt-2 rounded-md bg-bg-offwhite p-2">
+                  {loadingVersion === v.versionNumber ? (
+                    <p className="text-xs text-text-tertiary">Loading...</p>
+                  ) : (
+                    <LineItemsEditor
+                      items={versionLineItems[v.versionNumber] ?? []}
+                      onChange={() => {}}
+                      readOnly
+                    />
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

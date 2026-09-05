@@ -2,15 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Badge, Button, Card, Checkbox, Input, Select, Textarea } from "@/components/ui";
-import type { Role } from "@/lib/permissions/roles";
 import { SERVICE_TYPE_OPTIONS, SHIPMENT_TYPE_OPTIONS, formatEnquiryRef } from "@/lib/validation/enquiry";
+import type { FieldConfigMap } from "@/lib/enquiries/field-config-keys";
 import { useAutosave } from "@/lib/hooks/useAutosave";
 import { CustomerCombobox, type CustomerOption } from "@/components/shared/CustomerCombobox";
-import { FreightForwardingFields, EMPTY_FREIGHT_DETAIL, type FreightDetailState } from "./FreightForwardingFields";
+import { FreightForwardingFields, EMPTY_FREIGHT_DETAIL, type FreightDetailState, type PortOption } from "./FreightForwardingFields";
 import { CustomsClearanceFields, EMPTY_CUSTOMS_DETAIL, type CustomsDetailState } from "./CustomsClearanceFields";
 import { TransportationFields, EMPTY_TRANSPORT_DETAIL, type TransportDetailState } from "./TransportationFields";
-import { ReviewModal } from "./ReviewModal";
 
 type ServiceTypeValue = (typeof SERVICE_TYPE_OPTIONS)[number]["value"];
 
@@ -19,26 +19,35 @@ interface Branch {
   name: string;
 }
 
+interface FreightPackageRaw {
+  length: number | null;
+  width: number | null;
+  height: number | null;
+  dimensionUnit: "MM" | "CM" | null;
+  weight: number | null;
+  containerType: string | null;
+}
+
 interface FreightDetailRaw {
   incoterm: string | null;
-  portOfLoading: string | null;
-  portOfDischarge: string | null;
+  portOfLoadingId: string | null;
+  portOfDischargeId: string | null;
+  finalDestinationAddress: string | null;
   cargoMode: "LCL_AIR" | "FCL" | null;
-  packageCount: number | null;
-  dimensions: string | null;
-  weight: number | null;
-  fclWeight: number | null;
-  containerType: string | null;
-  containerCount: number | null;
   isOdc: boolean;
   odcDimensions: string | null;
   odcPackageCount: number | null;
   odcPerPackageWeight: number | null;
+  packages: FreightPackageRaw[];
+}
+
+interface CommodityLineRaw {
+  hsCode: string | null;
+  commodity: string | null;
 }
 
 interface CustomsDetailRaw {
-  hsCode: string | null;
-  commodity: string | null;
+  commodityLines: CommodityLineRaw[];
 }
 
 interface TransportDetailRaw {
@@ -46,7 +55,10 @@ interface TransportDetailRaw {
   destination: string | null;
   cargoMode: "LCL_AIR" | "FCL" | null;
   packageCount: number | null;
-  dimensions: string | null;
+  length: number | null;
+  width: number | null;
+  height: number | null;
+  dimensionUnit: "MM" | "CM" | null;
   weight: number | null;
   fclWeight: number | null;
   containerType: string | null;
@@ -85,15 +97,18 @@ function toFreightState(raw: FreightDetailRaw | null): FreightDetailState {
   if (!raw) return EMPTY_FREIGHT_DETAIL;
   return {
     incoterm: raw.incoterm ?? "",
-    portOfLoading: raw.portOfLoading ?? "",
-    portOfDischarge: raw.portOfDischarge ?? "",
+    portOfLoadingId: raw.portOfLoadingId ?? "",
+    portOfDischargeId: raw.portOfDischargeId ?? "",
+    finalDestinationAddress: raw.finalDestinationAddress ?? "",
     cargoMode: raw.cargoMode ?? "",
-    packageCount: raw.packageCount,
-    dimensions: raw.dimensions ?? "",
-    weight: raw.weight,
-    fclWeight: raw.fclWeight,
-    containerType: raw.containerType ?? "",
-    containerCount: raw.containerCount,
+    packages: raw.packages.map((p) => ({
+      length: p.length,
+      width: p.width,
+      height: p.height,
+      dimensionUnit: p.dimensionUnit ?? "",
+      weight: p.weight,
+      containerType: p.containerType ?? "",
+    })),
     isOdc: raw.isOdc,
     odcDimensions: raw.odcDimensions ?? "",
     odcPackageCount: raw.odcPackageCount,
@@ -102,8 +117,8 @@ function toFreightState(raw: FreightDetailRaw | null): FreightDetailState {
 }
 
 function toCustomsState(raw: CustomsDetailRaw | null): CustomsDetailState {
-  if (!raw) return EMPTY_CUSTOMS_DETAIL;
-  return { hsCode: raw.hsCode ?? "", commodity: raw.commodity ?? "" };
+  if (!raw || raw.commodityLines.length === 0) return EMPTY_CUSTOMS_DETAIL;
+  return { commodityLines: raw.commodityLines.map((l) => ({ hsCode: l.hsCode ?? "", commodity: l.commodity ?? "" })) };
 }
 
 function toTransportState(raw: TransportDetailRaw | null): TransportDetailState {
@@ -113,7 +128,10 @@ function toTransportState(raw: TransportDetailRaw | null): TransportDetailState 
     destination: raw.destination ?? "",
     cargoMode: raw.cargoMode ?? "",
     packageCount: raw.packageCount,
-    dimensions: raw.dimensions ?? "",
+    length: raw.length,
+    width: raw.width,
+    height: raw.height,
+    dimensionUnit: raw.dimensionUnit ?? "",
     weight: raw.weight,
     fclWeight: raw.fclWeight,
     containerType: raw.containerType ?? "",
@@ -167,11 +185,35 @@ function toAutosavePayload(form: FormState) {
     shipmentType: form.shipmentType || null,
     serviceTypes: form.serviceTypes,
     rfqReason: form.rfqReason || null,
-    freightDetail: { ...form.freightDetail, cargoMode: form.freightDetail.cargoMode || null },
-    customsDetail: form.customsDetail,
+    freightDetail: {
+      incoterm: form.freightDetail.incoterm || null,
+      portOfLoadingId: form.freightDetail.portOfLoadingId || null,
+      portOfDischargeId: form.freightDetail.portOfDischargeId || null,
+      finalDestinationAddress: form.freightDetail.finalDestinationAddress || null,
+      cargoMode: form.freightDetail.cargoMode || null,
+      packages: form.freightDetail.packages.map((p) => ({
+        length: p.length,
+        width: p.width,
+        height: p.height,
+        dimensionUnit: p.dimensionUnit || null,
+        weight: p.weight,
+        containerType: p.containerType || null,
+      })),
+      isOdc: form.freightDetail.isOdc,
+      odcDimensions: form.freightDetail.odcDimensions || null,
+      odcPackageCount: form.freightDetail.odcPackageCount,
+      odcPerPackageWeight: form.freightDetail.odcPerPackageWeight,
+    },
+    customsDetail: {
+      commodityLines: form.customsDetail.commodityLines.map((l) => ({
+        hsCode: l.hsCode || null,
+        commodity: l.commodity || null,
+      })),
+    },
     transportDetail: {
       ...form.transportDetail,
       cargoMode: form.transportDetail.cargoMode || null,
+      dimensionUnit: form.transportDetail.dimensionUnit || null,
       deliveryType: form.transportDetail.deliveryType || null,
     },
   };
@@ -180,20 +222,28 @@ function toAutosavePayload(form: FormState) {
 interface EnquiryFormProps {
   enquiry: EnquiryDetail;
   branches: Branch[];
-  role: Role;
+  ports: PortOption[];
+  // Admin-configured field visibility/requiredness per service type (Stage
+  // 12c "RFQ formatting") — merged map, already defaulted for every known
+  // field key server-side.
+  fieldConfig: FieldConfigMap;
   canEdit: boolean;
-  canApprove: boolean;
+  // True once this enquiry has been bundled into a Quotation — locked from
+  // further edits at that point so the quote and its source RFQ can't drift.
+  isLocked: boolean;
 }
 
-export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: EnquiryFormProps) {
+const UNSUBMITTED_STATUSES = ["DRAFT", "NEEDS_CORRECTION"] as const;
+
+export function EnquiryForm({ enquiry, branches, ports, fieldConfig, canEdit, isLocked }: EnquiryFormProps) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => buildInitialState(enquiry));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const editable = canEdit && (enquiry.status === "DRAFT" || enquiry.status === "NEEDS_CORRECTION" || role === "ADMIN");
+  const editable = canEdit && !isLocked;
+  const unsubmitted = (UNSUBMITTED_STATUSES as readonly string[]).includes(enquiry.status);
 
   async function saveDraft(value: FormState) {
     const res = await fetch(`/api/enquiries/${enquiry.id}`, {
@@ -221,15 +271,11 @@ export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: En
     setSubmitting(true);
     setSubmitError(null);
 
-    try {
-      await saveDraft(form);
-    } catch {
-      setSubmitting(false);
-      setSubmitError("Failed to save latest changes before submitting");
-      return;
-    }
-
-    const res = await fetch(`/api/enquiries/${enquiry.id}/submit`, { method: "PATCH" });
+    const res = await fetch(`/api/enquiries/${enquiry.id}/submit`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(toAutosavePayload(form)),
+    });
     const body = await res.json();
     setSubmitting(false);
 
@@ -239,25 +285,27 @@ export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: En
       return;
     }
 
-    router.refresh();
+    toast.success("Enquiry submitted — ready for quotation");
+    router.push("/enquiries");
   }
 
-  async function handleReview(decision: "approve" | "needs_correction", note?: string) {
-    setReviewError(null);
-    const res = await fetch(`/api/enquiries/${enquiry.id}/review`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision, note }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      const message = body.error ?? "Review action failed";
-      if (decision === "needs_correction") throw new Error(message);
-      setReviewError(message);
+  async function handleSaveAndClose() {
+    setSaving(true);
+    setSubmitError(null);
+    try {
+      await saveDraft(form);
+    } catch {
+      setSaving(false);
+      setSubmitError("Failed to save changes");
       return;
     }
-    setReviewModalOpen(false);
-    router.refresh();
+    setSaving(false);
+    toast.success("Changes saved");
+    router.push("/enquiries");
+  }
+
+  function handleBack() {
+    router.back();
   }
 
   return (
@@ -375,6 +423,8 @@ export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: En
             value={form.freightDetail}
             onChange={(freightDetail) => setForm({ ...form, freightDetail })}
             disabled={!editable}
+            ports={ports}
+            fieldConfig={fieldConfig.FREIGHT_FORWARDING}
           />
         </div>
       )}
@@ -384,6 +434,7 @@ export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: En
             value={form.customsDetail}
             onChange={(customsDetail) => setForm({ ...form, customsDetail })}
             disabled={!editable}
+            fieldConfig={fieldConfig.CUSTOMS_CLEARANCE}
           />
         </div>
       )}
@@ -393,34 +444,30 @@ export function EnquiryForm({ enquiry, branches, role, canEdit, canApprove }: En
             value={form.transportDetail}
             onChange={(transportDetail) => setForm({ ...form, transportDetail })}
             disabled={!editable}
+            fieldConfig={fieldConfig.TRANSPORTATION}
           />
         </div>
       )}
 
       {submitError && <p className="mb-3 text-sm text-status-danger-fg">{submitError}</p>}
-      {reviewError && <p className="mb-3 text-sm text-status-danger-fg">{reviewError}</p>}
 
       <div className="flex justify-end gap-2">
-        {editable && (
+        {editable && !unsubmitted && (
+          <>
+            <Button variant="ghost" onClick={handleBack}>
+              Back
+            </Button>
+            <Button onClick={handleSaveAndClose} disabled={saving || autosaveStatus === "saving"}>
+              {saving ? "Saving..." : "Save & Close"}
+            </Button>
+          </>
+        )}
+        {editable && unsubmitted && (
           <Button onClick={handleSubmit} disabled={submitting || autosaveStatus === "saving"}>
             {submitting ? "Submitting..." : "Submit Enquiry"}
           </Button>
         )}
-        {canApprove && enquiry.status === "OPEN" && (
-          <>
-            <Button variant="danger" onClick={() => setReviewModalOpen(true)}>
-              Flag Back
-            </Button>
-            <Button onClick={() => handleReview("approve")}>Approve</Button>
-          </>
-        )}
       </div>
-
-      <ReviewModal
-        open={reviewModalOpen}
-        onClose={() => setReviewModalOpen(false)}
-        onSubmit={(note) => handleReview("needs_correction", note)}
-      />
     </div>
   );
 }

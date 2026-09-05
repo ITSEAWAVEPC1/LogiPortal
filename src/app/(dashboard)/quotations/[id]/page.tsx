@@ -64,7 +64,6 @@ export default async function QuotationDetailPage({ params }: QuotationDetailPag
       // straddle two different QuotationVersion records.
       key={`${quotation.id}-${quotation.currentVersionNumber}`}
       quotation={quotation}
-      currentVersion={currentVersion}
       lineItems={lineItems}
       canEdit={canEdit}
       canApprove={canApprove}

@@ -23,6 +23,15 @@ export const DELIVERY_TYPE_OPTIONS = [
   { value: "DESTUFF", label: "Destuff" },
 ] as const;
 
+export const DIMENSION_UNIT_OPTIONS = [
+  { value: "MM", label: "mm" },
+  { value: "CM", label: "cm" },
+] as const;
+
+// Incoterms whose Freight Forwarding detail shows the Final Destination
+// Address field. Never mandatory even when shown.
+export const FINAL_DESTINATION_ADDRESS_INCOTERMS = ["EXW", "DDP", "DDU", "DAP"] as const;
+
 // Unified reference: prefer the stored RFQ-DDMMYY-NNNN string; fall back to the
 // legacy computed ENQ-YYYY-NNNN for rows created before the reference backfill.
 export function formatEnquiryRef(row: {
@@ -38,19 +47,34 @@ export function formatEnquiryRef(row: {
 const num = z.number().nullable().optional();
 const str = z.string().trim().nullable().optional();
 
+// One row per package (LCL & Air) or per container (FCL, so weight and
+// container type are entered per container). All fields optional — dims and
+// weight are never mandatory.
+const packageLenient = z.object({
+  length: num,
+  width: num,
+  height: num,
+  dimensionUnit: z.enum(["MM", "CM"]).nullable().optional(),
+  weight: num,
+  containerType: str,
+});
+
+const commodityLineLenient = z.object({
+  hsCode: str,
+  commodity: str,
+});
+
 // Lenient — every field optional, no cross-field rules. Drafts can be
 // incomplete/inconsistent at any time; this is what autosave PATCHes with.
 const freightDetailLenient = z.object({
   incoterm: str,
-  portOfLoading: str,
-  portOfDischarge: str,
+  portOfLoadingId: str,
+  portOfDischargeId: str,
+  // Only relevant when incoterm is one of FINAL_DESTINATION_ADDRESS_INCOTERMS;
+  // never mandatory either way.
+  finalDestinationAddress: str,
   cargoMode: z.enum(["LCL_AIR", "FCL"]).nullable().optional(),
-  packageCount: num,
-  dimensions: str,
-  weight: num,
-  fclWeight: num,
-  containerType: str,
-  containerCount: num,
+  packages: z.array(packageLenient).optional(),
   isOdc: z.boolean().optional(),
   odcDimensions: str,
   odcPackageCount: num,
@@ -58,8 +82,7 @@ const freightDetailLenient = z.object({
 });
 
 const customsDetailLenient = z.object({
-  hsCode: str,
-  commodity: str,
+  commodityLines: z.array(commodityLineLenient).optional(),
 });
 
 const transportDetailLenient = z.object({
@@ -67,7 +90,10 @@ const transportDetailLenient = z.object({
   destination: str,
   cargoMode: z.enum(["LCL_AIR", "FCL"]).nullable().optional(),
   packageCount: num,
-  dimensions: str,
+  length: num,
+  width: num,
+  height: num,
+  dimensionUnit: z.enum(["MM", "CM"]).nullable().optional(),
   weight: num,
   fclWeight: num,
   containerType: str,
@@ -96,9 +122,14 @@ export const enquiryAutosaveSchema = z.object({
 
 export type EnquiryAutosaveInput = z.infer<typeof enquiryAutosaveSchema>;
 
-// Strict — run only on explicit "Submit Enquiry". Required-ness is keyed off
-// serviceTypes via superRefine, so a field required under Freight Forwarding
-// is never evaluated unless FREIGHT_FORWARDING is actually selected.
+// Strict — run only on explicit "Submit Enquiry". Structural only: a service
+// type's detail object must exist, and its ODC sub-fields are required when
+// isOdc is checked (self-gated behind that checkbox, not admin-configurable).
+// Everything else — Incoterm, ports, cargo mode, "at least one
+// package/commodity line", Transportation's pickup/destination/etc — moved to
+// src/lib/enquiries/field-config.ts's checkConfigurableFieldRequirements,
+// which the submit route runs after this schema passes, so admin-set
+// per-service-type requiredness (Stage 12c) is enforced server-side too.
 export const enquirySubmitSchema = enquiryAutosaveSchema
   .extend({
     shipmentType: z.enum(["IMPORT", "EXPORT"]),
@@ -114,53 +145,21 @@ export const enquirySubmitSchema = enquiryAutosaveSchema
       const d = data.freightDetail;
       if (!d) {
         ctx.addIssue({ code: "custom", path: ["freightDetail"], message: "Freight Forwarding details are required" });
-      } else {
-        if (!d.incoterm) ctx.addIssue({ code: "custom", path: ["freightDetail", "incoterm"], message: "Incoterm is required" });
-        if (!d.portOfLoading)
-          ctx.addIssue({ code: "custom", path: ["freightDetail", "portOfLoading"], message: "Port of Loading is required" });
-        if (!d.portOfDischarge)
-          ctx.addIssue({ code: "custom", path: ["freightDetail", "portOfDischarge"], message: "Port of Discharge is required" });
-        if (!d.cargoMode) {
-          ctx.addIssue({ code: "custom", path: ["freightDetail", "cargoMode"], message: "Select LCL & Air or FCL" });
-        } else if (d.cargoMode === "LCL_AIR") {
-          if (d.packageCount == null)
-            ctx.addIssue({ code: "custom", path: ["freightDetail", "packageCount"], message: "No. of Packages is required" });
-          if (!d.dimensions)
-            ctx.addIssue({ code: "custom", path: ["freightDetail", "dimensions"], message: "Dimensions are required" });
-          if (d.weight == null)
-            ctx.addIssue({ code: "custom", path: ["freightDetail", "weight"], message: "Weight is required" });
-        } else if (d.cargoMode === "FCL") {
-          if (d.fclWeight == null)
-            ctx.addIssue({ code: "custom", path: ["freightDetail", "fclWeight"], message: "Weight is required" });
-          if (!d.containerType)
-            ctx.addIssue({ code: "custom", path: ["freightDetail", "containerType"], message: "Container Type is required" });
-          if (d.containerCount == null)
-            ctx.addIssue({
-              code: "custom",
-              path: ["freightDetail", "containerCount"],
-              message: "No. of Containers is required",
-            });
-          if (d.isOdc) {
-            if (!d.odcDimensions)
-              ctx.addIssue({
-                code: "custom",
-                path: ["freightDetail", "odcDimensions"],
-                message: "ODC Dimensions are required",
-              });
-            if (d.odcPackageCount == null)
-              ctx.addIssue({
-                code: "custom",
-                path: ["freightDetail", "odcPackageCount"],
-                message: "ODC No. of Packages is required",
-              });
-            if (d.odcPerPackageWeight == null)
-              ctx.addIssue({
-                code: "custom",
-                path: ["freightDetail", "odcPerPackageWeight"],
-                message: "ODC Per Package Weight is required",
-              });
-          }
-        }
+      } else if (d.isOdc) {
+        if (!d.odcDimensions)
+          ctx.addIssue({ code: "custom", path: ["freightDetail", "odcDimensions"], message: "ODC Dimensions are required" });
+        if (d.odcPackageCount == null)
+          ctx.addIssue({
+            code: "custom",
+            path: ["freightDetail", "odcPackageCount"],
+            message: "ODC No. of Packages is required",
+          });
+        if (d.odcPerPackageWeight == null)
+          ctx.addIssue({
+            code: "custom",
+            path: ["freightDetail", "odcPerPackageWeight"],
+            message: "ODC Per Package Weight is required",
+          });
       }
     }
 
@@ -169,9 +168,20 @@ export const enquirySubmitSchema = enquiryAutosaveSchema
       if (!d) {
         ctx.addIssue({ code: "custom", path: ["customsDetail"], message: "Customs Clearance details are required" });
       } else {
-        if (!d.hsCode) ctx.addIssue({ code: "custom", path: ["customsDetail", "hsCode"], message: "HS Code is required" });
-        if (!d.commodity)
-          ctx.addIssue({ code: "custom", path: ["customsDetail", "commodity"], message: "Commodity is required" });
+        d.commodityLines?.forEach((line, index) => {
+          if (!line.hsCode)
+            ctx.addIssue({
+              code: "custom",
+              path: ["customsDetail", "commodityLines", index, "hsCode"],
+              message: "HS Code is required",
+            });
+          if (!line.commodity)
+            ctx.addIssue({
+              code: "custom",
+              path: ["customsDetail", "commodityLines", index, "commodity"],
+              message: "Commodity is required",
+            });
+        });
       }
     }
 
@@ -179,48 +189,21 @@ export const enquirySubmitSchema = enquiryAutosaveSchema
       const d = data.transportDetail;
       if (!d) {
         ctx.addIssue({ code: "custom", path: ["transportDetail"], message: "Transportation details are required" });
-      } else {
-        if (!d.pickup) ctx.addIssue({ code: "custom", path: ["transportDetail", "pickup"], message: "Pickup is required" });
-        if (!d.destination)
-          ctx.addIssue({ code: "custom", path: ["transportDetail", "destination"], message: "Destination is required" });
-        if (!d.cargoMode) {
-          ctx.addIssue({ code: "custom", path: ["transportDetail", "cargoMode"], message: "Select LCL & Air or FCL" });
-        } else if (d.cargoMode === "LCL_AIR") {
-          if (d.packageCount == null)
-            ctx.addIssue({ code: "custom", path: ["transportDetail", "packageCount"], message: "No. of Packages is required" });
-          if (!d.dimensions)
-            ctx.addIssue({ code: "custom", path: ["transportDetail", "dimensions"], message: "Dimensions are required" });
-          if (d.weight == null)
-            ctx.addIssue({ code: "custom", path: ["transportDetail", "weight"], message: "Weight is required" });
-        } else if (d.cargoMode === "FCL") {
-          // Note: Transportation's FCL block has no container-count field, unlike Freight Forwarding's.
-          if (d.fclWeight == null)
-            ctx.addIssue({ code: "custom", path: ["transportDetail", "fclWeight"], message: "Weight is required" });
-          if (!d.containerType)
-            ctx.addIssue({ code: "custom", path: ["transportDetail", "containerType"], message: "Container Type is required" });
-          if (!d.deliveryType)
-            ctx.addIssue({ code: "custom", path: ["transportDetail", "deliveryType"], message: "Delivery Type is required" });
-          if (d.isOdc) {
-            if (!d.odcDimensions)
-              ctx.addIssue({
-                code: "custom",
-                path: ["transportDetail", "odcDimensions"],
-                message: "ODC Dimensions are required",
-              });
-            if (d.odcPackageCount == null)
-              ctx.addIssue({
-                code: "custom",
-                path: ["transportDetail", "odcPackageCount"],
-                message: "ODC No. of Packages is required",
-              });
-            if (d.odcPerPackageWeight == null)
-              ctx.addIssue({
-                code: "custom",
-                path: ["transportDetail", "odcPerPackageWeight"],
-                message: "ODC Per Package Weight is required",
-              });
-          }
-        }
+      } else if (d.isOdc) {
+        if (!d.odcDimensions)
+          ctx.addIssue({ code: "custom", path: ["transportDetail", "odcDimensions"], message: "ODC Dimensions are required" });
+        if (d.odcPackageCount == null)
+          ctx.addIssue({
+            code: "custom",
+            path: ["transportDetail", "odcPackageCount"],
+            message: "ODC No. of Packages is required",
+          });
+        if (d.odcPerPackageWeight == null)
+          ctx.addIssue({
+            code: "custom",
+            path: ["transportDetail", "odcPerPackageWeight"],
+            message: "ODC Per Package Weight is required",
+          });
       }
     }
   });

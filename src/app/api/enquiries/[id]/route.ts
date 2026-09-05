@@ -3,18 +3,17 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { enquiryAutosaveSchema } from "@/lib/validation/enquiry";
+import { persistEnquiryDraft } from "@/lib/enquiries/persist-draft";
 
 const DETAIL_INCLUDE = {
   organization: { select: { id: true, name: true } },
   branch: { select: { id: true, name: true } },
   doer: { select: { id: true, name: true } },
   reviewedBy: { select: { id: true, name: true } },
-  freightDetail: true,
-  customsDetail: true,
+  freightDetail: { include: { packages: { orderBy: { sortOrder: "asc" } } } },
+  customsDetail: { include: { commodityLines: { orderBy: { sortOrder: "asc" } } } },
   transportDetail: true,
 } as const;
-
-const EDITABLE_STATUSES = ["DRAFT", "NEEDS_CORRECTION"] as const;
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -30,9 +29,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   return NextResponse.json({ enquiry });
 }
 
-// Lenient autosave/edit — accepts partial/inconsistent draft state. Locked
-// to DRAFT/NEEDS_CORRECTION for non-Admins so an OPEN or READY_FOR_QUOTATION
-// enquiry can't be silently rewritten out from under the review queue.
+// Lenient autosave/edit — accepts partial/inconsistent draft state. Stage
+// 12b removed the approval gate, so this is no longer locked to
+// DRAFT/NEEDS_CORRECTION: any Enquiry can be edited right up until it has
+// been bundled into a Quotation, at which point it's locked so the quote and
+// its source RFQ can't silently drift apart.
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -41,11 +42,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const { id } = await params;
-  const existing = await prisma.enquiry.findUnique({ where: { id } });
+  const existing = await prisma.enquiry.findUnique({ where: { id }, include: { quotationEnquiry: { select: { id: true } } } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (session.user.role !== "ADMIN" && !EDITABLE_STATUSES.includes(existing.status as (typeof EDITABLE_STATUSES)[number])) {
-    return NextResponse.json({ error: `Cannot edit an enquiry with status ${existing.status}` }, { status: 409 });
+  if (existing.quotationEnquiry) {
+    return NextResponse.json({ error: "This enquiry has been converted to a Quotation and can no longer be edited" }, { status: 409 });
   }
 
   const body = await request.json();
@@ -53,47 +54,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!parsed.success) {
     return NextResponse.json({ error: "Validation failed", issues: parsed.error.issues }, { status: 400 });
   }
-  const data = parsed.data;
 
-  const enquiry = await prisma.$transaction(async (tx) => {
-    const updated = await tx.enquiry.update({
-      where: { id },
-      data: {
-        branchId: data.branchId,
-        organizationId: data.organizationId,
-        contactPersonName: data.contactPersonName,
-        contactPersonPhone: data.contactPersonPhone,
-        contactPersonEmail: data.contactPersonEmail,
-        shipmentType: data.shipmentType,
-        serviceTypes: data.serviceTypes,
-        rfqReason: data.rfqReason,
-      },
-    });
-
-    if (data.freightDetail) {
-      await tx.enquiryFreightDetail.upsert({
-        where: { enquiryId: id },
-        create: { enquiryId: id, ...data.freightDetail },
-        update: { ...data.freightDetail },
-      });
-    }
-    if (data.customsDetail) {
-      await tx.enquiryCustomsDetail.upsert({
-        where: { enquiryId: id },
-        create: { enquiryId: id, ...data.customsDetail },
-        update: { ...data.customsDetail },
-      });
-    }
-    if (data.transportDetail) {
-      await tx.enquiryTransportDetail.upsert({
-        where: { enquiryId: id },
-        create: { enquiryId: id, ...data.transportDetail },
-        update: { ...data.transportDetail },
-      });
-    }
-
-    return updated;
-  });
+  const enquiry = await prisma.$transaction((tx) => persistEnquiryDraft(tx, id, parsed.data));
 
   return NextResponse.json({ enquiry });
 }

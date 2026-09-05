@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Badge, Button, DataTable, Input, Select } from "@/components/ui";
 import { formatEnquiryRef } from "@/lib/validation/enquiry";
-import { ReviewModal } from "./ReviewModal";
 
 interface EnquiryRow {
   id: string;
@@ -16,6 +16,7 @@ interface EnquiryRow {
   organization: { id: string; name: string };
   branch: { id: string; name: string };
   doer: { id: string; name: string };
+  quotationEnquiry: { id: string } | null;
 }
 
 interface Branch {
@@ -28,7 +29,7 @@ interface EnquiryListProps {
   branches: Branch[];
   initialQuery: { status: string; branchId: string; q: string };
   canCreate: boolean;
-  canApprove: boolean;
+  canEdit: boolean;
 }
 
 const STATUS_TABS = [
@@ -45,14 +46,12 @@ const STATUS_BADGE_VARIANT = {
   NEEDS_CORRECTION: "danger",
 } as const;
 
-export function EnquiryList({ enquiries, branches, initialQuery, canCreate, canApprove }: EnquiryListProps) {
+export function EnquiryList({ enquiries, branches, initialQuery, canCreate, canEdit }: EnquiryListProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [q, setQ] = useState(initialQuery.q);
-  const [reviewTarget, setReviewTarget] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
 
   function updateQuery(next: Partial<{ status: string; branchId: string; q: string }>) {
     const merged = { ...initialQuery, q, ...next };
@@ -62,36 +61,6 @@ export function EnquiryList({ enquiries, branches, initialQuery, canCreate, canA
       else params.delete(key);
     });
     startTransition(() => router.push(`${pathname}?${params.toString()}`));
-  }
-
-  async function handleApprove(id: string) {
-    setActionError(null);
-    const res = await fetch(`/api/enquiries/${id}/review`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision: "approve" }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setActionError(body.error ?? "Approve failed");
-      return;
-    }
-    router.refresh();
-  }
-
-  async function handleFlagBack(note: string) {
-    if (!reviewTarget) return;
-    const res = await fetch(`/api/enquiries/${reviewTarget}/review`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision: "needs_correction", note }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.error ?? "Flag back failed");
-    }
-    setReviewTarget(null);
-    router.refresh();
   }
 
   return (
@@ -139,8 +108,6 @@ export function EnquiryList({ enquiries, branches, initialQuery, canCreate, canA
         />
       </div>
 
-      {actionError && <p className="mb-3 text-sm text-status-danger-fg">{actionError}</p>}
-
       <DataTable
         columns={[
           {
@@ -165,15 +132,15 @@ export function EnquiryList({ enquiries, branches, initialQuery, canCreate, canA
             key: "actions",
             header: "",
             render: (row) =>
-              canApprove && row.status === "OPEN" ? (
-                <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => setReviewTarget(row.id)}>
-                    Flag Back
-                  </Button>
-                  <Button size="sm" onClick={() => handleApprove(row.id)}>
-                    Approve
-                  </Button>
-                </div>
+              canEdit && !row.quotationEnquiry ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Edit enquiry"
+                  onClick={() => router.push(`/enquiries/${row.id}`)}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
               ) : null,
           },
         ]}
@@ -181,8 +148,6 @@ export function EnquiryList({ enquiries, branches, initialQuery, canCreate, canA
         getRowKey={(row) => row.id}
         emptyMessage="No enquiries found."
       />
-
-      <ReviewModal open={reviewTarget !== null} onClose={() => setReviewTarget(null)} onSubmit={handleFlagBack} />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Card, Checkbox } from "@/components/ui";
+import { Button, Card, Radio } from "@/components/ui";
 import { CustomerCombobox, type CustomerOption } from "@/components/shared/CustomerCombobox";
 import { formatEnquiryRef } from "@/lib/validation/enquiry";
 
@@ -30,7 +30,7 @@ export function NewQuotationForm({ branches }: NewQuotationFormProps) {
   const [organization, setOrganization] = useState<CustomerOption | null>(null);
   const [enquiries, setEnquiries] = useState<EnquiryOption[]>([]);
   const [loadingEnquiries, setLoadingEnquiries] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -50,7 +50,7 @@ export function NewQuotationForm({ branches }: NewQuotationFormProps) {
       .then((body) => {
         if (cancelled) return;
         setEnquiries(body.enquiries ?? []);
-        setSelectedIds([]);
+        setSelectedId(null);
       })
       .finally(() => {
         if (!cancelled) setLoadingEnquiries(false);
@@ -60,17 +60,13 @@ export function NewQuotationForm({ branches }: NewQuotationFormProps) {
     };
   }, [organization]);
 
-  function toggleEnquiry(id: string) {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
-
   async function handleSubmit() {
     if (!organization) {
       setError("Select a customer first.");
       return;
     }
-    if (selectedIds.length === 0) {
-      setError("Select at least one enquiry to bundle into this quotation.");
+    if (!selectedId) {
+      setError("Select an enquiry to create this quotation from.");
       return;
     }
     setSubmitting(true);
@@ -78,7 +74,7 @@ export function NewQuotationForm({ branches }: NewQuotationFormProps) {
     const res = await fetch("/api/quotations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organizationId: organization.id, enquiryIds: selectedIds }),
+      body: JSON.stringify({ organizationId: organization.id, enquiryId: selectedId }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -113,13 +109,15 @@ export function NewQuotationForm({ branches }: NewQuotationFormProps) {
           ) : (
             <div className="flex flex-col gap-2 rounded-md border border-border-subtle p-3">
               {enquiries.map((enquiry) => (
-                <Checkbox
+                <Radio
                   key={enquiry.id}
+                  name="enquiry"
+                  value={enquiry.id}
                   label={`${formatEnquiryRef(enquiry)} — ${enquiry.branch.name} — ${
                     enquiry.shipmentType ?? "—"
                   } (${enquiry.serviceTypes.join(", ") || "—"})`}
-                  checked={selectedIds.includes(enquiry.id)}
-                  onChange={() => toggleEnquiry(enquiry.id)}
+                  checked={selectedId === enquiry.id}
+                  onChange={() => setSelectedId(enquiry.id)}
                 />
               ))}
             </div>
@@ -130,7 +128,7 @@ export function NewQuotationForm({ branches }: NewQuotationFormProps) {
       {error && <p className="text-sm text-status-danger-fg">{error}</p>}
 
       <div className="flex justify-end">
-        <Button onClick={handleSubmit} disabled={submitting || !organization || selectedIds.length === 0}>
+        <Button onClick={handleSubmit} disabled={submitting || !organization || !selectedId}>
           {submitting ? "Creating..." : "Create Quotation"}
         </Button>
       </div>

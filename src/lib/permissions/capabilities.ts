@@ -17,6 +17,8 @@ export type CapabilityScreen =
   | "dataImport"
   | "enquiries"
   | "billTypes"
+  | "ports"
+  | "enquiryFieldConfig"
   | "quotations"
   | "jobs"
   | "workflowTemplates"
@@ -33,6 +35,15 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     // Admin-configurable Billing master (Customer Master v2) — new Bill
     // Types can be added without a deploy, per the acceptance criteria.
     billTypes: ["view", "create", "edit", "delete"],
+    // Admin-configurable Port master (stakeholder field-rework addition) —
+    // Freight Forwarding's Port of Loading/Discharge dropdown source, same
+    // shape as billTypes.
+    ports: ["view", "create", "edit", "delete"],
+    // Stage 12c "RFQ formatting" — admin controls which Enquiry fields are
+    // shown/required per service type. Admin-only; every other role just
+    // reads the merged config directly (server components query Prisma, no
+    // capability check needed for that read path).
+    enquiryFieldConfig: ["view", "edit"],
     quotations: ["view", "create", "edit", "approve"],
     jobs: ["view", "create", "edit", "approve"],
     // Stage 5: the workflow-template admin screen — corrections without a

@@ -28,7 +28,11 @@ export default async function EnquiriesPage({ searchParams }: EnquiriesPageProps
   }
 
   const params = await searchParams;
-  const status = STATUS_VALUES.find((s) => s === params.status) ?? "OPEN";
+  // Stage 12b removed the approval gate — submissions now land straight on
+  // READY_FOR_QUOTATION, so that's the default landing tab instead of OPEN
+  // (which nothing new reaches any more, though older rows may still sit
+  // there).
+  const status = STATUS_VALUES.find((s) => s === params.status) ?? "READY_FOR_QUOTATION";
   const branchId = params.branchId;
   const q = params.q?.trim();
 
@@ -50,6 +54,7 @@ export default async function EnquiriesPage({ searchParams }: EnquiriesPageProps
         organization: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },
         doer: { select: { id: true, name: true } },
+        quotationEnquiry: { select: { id: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -57,7 +62,7 @@ export default async function EnquiriesPage({ searchParams }: EnquiriesPageProps
   ]);
 
   const canCreate = can(role, "enquiries", "create");
-  const canApprove = can(role, "enquiries", "approve");
+  const canEdit = can(role, "enquiries", "edit");
 
   return (
     <EnquiryList
@@ -65,7 +70,7 @@ export default async function EnquiriesPage({ searchParams }: EnquiriesPageProps
       branches={branches}
       initialQuery={{ status, branchId: branchId ?? "", q: q ?? "" }}
       canCreate={canCreate}
-      canApprove={canApprove}
+      canEdit={canEdit}
     />
   );
 }

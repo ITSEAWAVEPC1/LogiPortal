@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { createQuotationSchema } from "@/lib/validation/quotation";
-import { formatEnquiryRef } from "@/lib/validation/enquiry";
 import { allocateRfqReference, inheritRfqReference } from "@/lib/reference/generate-reference";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -53,9 +52,12 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ quotations });
 }
 
-// Bundles one or more READY_FOR_QUOTATION Enquiries (same Organization, same
-// Branch) into a single Quotation. An Enquiry can only ever be attached to
-// one Quotation (QuotationEnquiry.enquiryId is unique) — see stage-3.md.
+// Bundles a single READY_FOR_QUOTATION Enquiry into a new Quotation. An
+// Enquiry can only ever be attached to one Quotation
+// (QuotationEnquiry.enquiryId is unique) — see stage-3.md. Stage 12d
+// restricted creation to exactly one Enquiry per Quotation (single-select
+// radio in the builder UI); QuotationEnquiry's join-table shape is
+// unchanged, just never given more than one row per Quotation going forward.
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -68,89 +70,52 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Validation failed", issues: parsed.error.issues }, { status: 400 });
   }
-  const { organizationId, enquiryIds: rawEnquiryIds } = parsed.data;
-  const enquiryIds = Array.from(new Set(rawEnquiryIds));
+  const { organizationId, enquiryId } = parsed.data;
 
   const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
   if (!organization) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
 
-  const enquiries = await prisma.enquiry.findMany({
-    where: { id: { in: enquiryIds } },
+  const enquiry = await prisma.enquiry.findUnique({
+    where: { id: enquiryId },
     include: { quotationEnquiry: true },
   });
-  if (enquiries.length !== enquiryIds.length) {
-    return NextResponse.json({ error: "One or more enquiries were not found" }, { status: 404 });
-  }
+  if (!enquiry) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
 
-  const notReady = enquiries.find((e) => e.status !== "READY_FOR_QUOTATION");
-  if (notReady) {
+  if (enquiry.status !== "READY_FOR_QUOTATION") {
     return NextResponse.json(
-      { error: `Enquiry ${notReady.id} is not Ready for Quotation (status: ${notReady.status})` },
+      { error: `Enquiry ${enquiry.id} is not Ready for Quotation (status: ${enquiry.status})` },
       { status: 409 },
     );
   }
-
-  const wrongOrg = enquiries.find((e) => e.organizationId !== organizationId);
-  if (wrongOrg) {
-    return NextResponse.json(
-      { error: `Enquiry ${wrongOrg.id} belongs to a different customer than the one selected` },
-      { status: 400 },
-    );
+  if (enquiry.organizationId !== organizationId) {
+    return NextResponse.json({ error: "Enquiry belongs to a different customer than the one selected" }, { status: 400 });
   }
-
-  const branchId = enquiries[0].branchId;
-  const wrongBranch = enquiries.find((e) => e.branchId !== branchId);
-  if (wrongBranch) {
-    return NextResponse.json(
-      { error: `Enquiry ${wrongBranch.id} belongs to a different branch — a Quotation can only bundle enquiries from one branch` },
-      { status: 400 },
-    );
+  if (enquiry.quotationEnquiry) {
+    return NextResponse.json({ error: "This enquiry is already attached to another Quotation" }, { status: 409 });
   }
-
-  const alreadyAttached = enquiries.find((e) => e.quotationEnquiry);
-  if (alreadyAttached) {
-    return NextResponse.json(
-      { error: `Enquiry ${alreadyAttached.id} is already attached to another Quotation` },
-      { status: 409 },
-    );
-  }
-
-  // Unified reference: reuse the primary (earliest-created) bundled enquiry's
-  // RFQ number verbatim; record the other bundled enquiry refs in
-  // sourceReference. A pre-backfill enquiry with no referenceNo yet falls back
-  // to a fresh mint so the quotation is never left without a reference.
-  const primary = [...enquiries].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
-  )[0];
-  const sourceReference =
-    enquiries
-      .filter((e) => e.id !== primary.id)
-      .map((e) => e.referenceNo ?? formatEnquiryRef(e))
-      .sort()
-      .join(", ") || null;
 
   const quotation = await prisma.$transaction(
     async (tx) => {
-      const ref = inheritRfqReference(primary) ?? (await allocateRfqReference(tx));
+      // Unified reference: reuse the enquiry's RFQ number verbatim. A
+      // pre-backfill enquiry with no referenceNo yet falls back to a fresh
+      // mint so the quotation is never left without a reference.
+      const ref = inheritRfqReference(enquiry) ?? (await allocateRfqReference(tx));
       const created = await tx.quotation.create({
         data: {
           organizationId,
-          branchId,
+          branchId: enquiry.branchId,
           createdById: session.user.id,
           status: "DRAFT",
           currentVersionNumber: 1,
           referenceNo: ref.referenceNo,
           refYear: ref.refYear,
           refSequence: ref.refSequence,
-          sourceReference,
-          enquiries: { create: enquiryIds.map((enquiryId) => ({ enquiryId })) },
+          enquiries: { create: [{ enquiryId }] },
           versions: {
-            create: {
-              versionNumber: 1,
-              currency: organization.defaultCurrency ?? "INR",
-              totalAmount: 0,
-              createdById: session.user.id,
-            },
+            // Stage 12d — the version total is always a single INR figure
+            // (each line item converts to INR on its own via rateInr), so
+            // this is no longer the customer's/organization's currency.
+            create: { versionNumber: 1, currency: "INR", totalAmount: 0, createdById: session.user.id },
           },
         },
       });

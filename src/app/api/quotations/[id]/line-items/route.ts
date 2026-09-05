@@ -40,7 +40,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (!parsed.success) {
     return NextResponse.json({ error: "Validation failed", issues: parsed.error.issues }, { status: 400 });
   }
-  const { currency, lineItems } = parsed.data;
+  const { lineItems } = parsed.data;
+  // Stage 12d — currency is per-line now; the version's total is always a
+  // single INR figure (each line converts via rateInr), so the version's
+  // own currency column is pinned to "INR" rather than client-supplied.
+  const currency = "INR";
   const totalAmount = lineItems.reduce((sum, item) => sum + item.amount, 0);
 
   const currentVersion = await prisma.quotationVersion.findUnique({
