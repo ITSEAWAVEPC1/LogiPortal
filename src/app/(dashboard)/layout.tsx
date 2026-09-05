@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { AppShell } from "@/components/layout/AppShell";
 import { Topbar } from "@/components/layout/Topbar";
 import { Toaster } from "@/components/shadcn/sonner";
+import { getVisibleNavItems } from "@/lib/permissions/access-matrix";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -20,17 +21,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   });
 
   return (
-    <div className="flex h-screen">
-      <Sidebar role={session.user.role} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar
-          userName={session.user.name ?? session.user.email ?? "User"}
-          role={session.user.role}
-          branches={branches}
-        />
-        <main className="flex-1 overflow-y-auto bg-background p-6">{children}</main>
-      </div>
+    <AppShell navItems={getVisibleNavItems(session.user.role)}>
+      <Topbar
+        userName={session.user.name ?? session.user.email ?? "User"}
+        role={session.user.role}
+        branches={branches}
+      />
+      <main className="flex-1 overflow-y-auto bg-background p-4 lg:p-6">{children}</main>
       <Toaster />
-    </div>
+    </AppShell>
   );
 }

@@ -27,7 +27,7 @@ interface ColumnPickerProps {
 // see docs/stage-checklists/customer-master-v2.md.
 export function ColumnPicker({ open, onClose, columns, selected, defaultSelected, onApply }: ColumnPickerProps) {
   return (
-    <Modal open={open} onClose={onClose} title="Customize Columns" className="max-w-2xl">
+    <Modal open={open} onClose={onClose} title="Customize Columns" className="lg:max-w-2xl">
       {/* Keyed by identity so state re-initializes on remount instead of via
           a setState-in-effect sync (same pattern as CustomerFormModal). */}
       {open && (

@@ -487,7 +487,7 @@ export function DocumentsPanel({ jobId, viewerRole, viewerId, focusStepId }: Pro
       </Modal>
 
       {/* HTML fallback preview */}
-      <Modal open={preview !== null} onClose={() => setPreview(null)} title="Document preview" className="max-w-3xl">
+      <Modal open={preview !== null} onClose={() => setPreview(null)} title="Document preview" className="lg:max-w-3xl">
         {preview && <DocumentHtmlPreview data={preview} />}
       </Modal>
     </Card>

@@ -24,12 +24,13 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-50 flex bg-black/40 lg:items-center lg:justify-center lg:p-4">
       <div
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative w-full max-w-md rounded-lg border border-border-subtle bg-surface p-6 shadow-lg",
+          "relative h-[100dvh] w-full overflow-y-auto bg-surface p-6 shadow-lg",
+          "lg:h-auto lg:max-h-[90dvh] lg:w-full lg:max-w-md lg:rounded-lg lg:border lg:border-border-subtle",
           className,
         )}
       >
