@@ -164,23 +164,23 @@ function BranchAddressTab({
 }) {
   return (
     <fieldset disabled={!canEdit} className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Input label="Branch name" required value={branch.branchName} onChange={(e) => onChange({ branchName: e.target.value })} />
         <Input label="Website" value={branch.website} onChange={(e) => onChange({ website: e.target.value })} />
       </div>
       <Input label="Address" value={branch.address} onChange={(e) => onChange({ address: e.target.value })} />
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
         <Input label="Country" value={branch.country} onChange={(e) => onChange({ country: e.target.value })} />
         <Input label="State/Province" value={branch.state} onChange={(e) => onChange({ state: e.target.value })} />
         <Input label="City" value={branch.city} onChange={(e) => onChange({ city: e.target.value })} />
         <Input label="Postal Code" value={branch.postalCode} onChange={(e) => onChange({ postalCode: e.target.value })} />
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Input label="Telephone" value={branch.telephone} onChange={(e) => onChange({ telephone: e.target.value })} />
         <Input label="Fax" value={branch.fax} onChange={(e) => onChange({ fax: e.target.value })} />
         <Input label="Email" type="email" value={branch.email} onChange={(e) => onChange({ email: e.target.value })} />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Select
           label="Sales Person"
           placeholder="Unassigned"

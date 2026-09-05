@@ -95,22 +95,38 @@ export function LineItemsEditor({ items, onChange, readOnly, availableCategories
             <div className="flex flex-col gap-2">
               {rows.length === 0 && <p className="text-xs text-text-tertiary">No {label.toLowerCase()} added.</p>}
               {rows.map(({ item, index }) => (
-                <div key={index} className="flex flex-wrap items-end gap-2 rounded-md border border-border-subtle p-2">
-                  <span className="w-6 pb-2 text-xs text-text-tertiary">{index + 1}</span>
-                  <Input
-                    label="Particulars"
-                    value={item.description}
-                    onChange={(e) => updateItem(index, { description: e.target.value })}
-                    disabled={readOnly}
-                    className="min-w-40 flex-1"
-                  />
+                <div
+                  key={index}
+                  className="grid grid-cols-2 gap-2 rounded-md border border-border-subtle p-2 lg:flex lg:flex-wrap lg:items-end lg:gap-2"
+                >
+                  {/* Mobile-only header row — index + remove, restated inline at lg+ below */}
+                  <div className="col-span-2 flex items-center justify-between lg:hidden">
+                    <span className="text-xs text-text-tertiary">{index + 1}</span>
+                    {!readOnly && (
+                      <Button size="sm" variant="ghost" onClick={() => removeItem(index)}>
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <span className="hidden w-6 pb-2 text-xs text-text-tertiary lg:block">{index + 1}</span>
+                  {/* col-span-2 must live on a wrapper div, not the Input's own className —
+                      Input applies className to the inner <input>, not its grid-item wrapper. */}
+                  <div className="col-span-2 lg:contents">
+                    <Input
+                      label="Particulars"
+                      value={item.description}
+                      onChange={(e) => updateItem(index, { description: e.target.value })}
+                      disabled={readOnly}
+                      className="lg:min-w-40 lg:flex-1"
+                    />
+                  </div>
                   <Select
                     label="Currency"
                     value={item.currency}
                     onChange={(e) => updateItem(index, { currency: e.target.value })}
                     options={CURRENCY_OPTIONS}
                     disabled={readOnly}
-                    className="w-24"
+                    className="lg:w-24"
                   />
                   <Input
                     label="Qty"
@@ -118,7 +134,7 @@ export function LineItemsEditor({ items, onChange, readOnly, availableCategories
                     value={item.quantity ?? ""}
                     onChange={(e) => updateItem(index, { quantity: e.target.value === "" ? null : Number(e.target.value) })}
                     disabled={readOnly}
-                    className="w-20"
+                    className="lg:w-20"
                   />
                   <Input
                     label="Rate"
@@ -126,7 +142,7 @@ export function LineItemsEditor({ items, onChange, readOnly, availableCategories
                     value={item.rate ?? ""}
                     onChange={(e) => updateItem(index, { rate: e.target.value === "" ? null : Number(e.target.value) })}
                     disabled={readOnly}
-                    className="w-24"
+                    className="lg:w-24"
                   />
                   {item.currency !== "INR" && (
                     <Input
@@ -137,7 +153,7 @@ export function LineItemsEditor({ items, onChange, readOnly, availableCategories
                         updateItem(index, { exchangeRate: e.target.value === "" ? null : Number(e.target.value) })
                       }
                       disabled={readOnly}
-                      className="w-24"
+                      className="lg:w-24"
                     />
                   )}
                   <Input
@@ -146,25 +162,27 @@ export function LineItemsEditor({ items, onChange, readOnly, availableCategories
                     value={item.rateInr ?? ""}
                     onChange={(e) => updateItem(index, { rateInr: e.target.value === "" ? null : Number(e.target.value) })}
                     disabled={readOnly}
-                    className="w-24"
+                    className="lg:w-24"
                   />
-                  <Input
-                    label="Remarks"
-                    value={item.remarks ?? ""}
-                    onChange={(e) => updateItem(index, { remarks: e.target.value })}
-                    disabled={readOnly}
-                    className="min-w-32 flex-1"
-                  />
+                  <div className="col-span-2 lg:contents">
+                    <Input
+                      label="Remarks"
+                      value={item.remarks ?? ""}
+                      onChange={(e) => updateItem(index, { remarks: e.target.value })}
+                      disabled={readOnly}
+                      className="lg:min-w-32 lg:flex-1"
+                    />
+                  </div>
                   <Input
                     label="Amount"
                     type="number"
                     value={item.amount}
                     onChange={(e) => updateItem(index, { amount: Number(e.target.value) })}
                     disabled={readOnly}
-                    className="w-28"
+                    className="lg:w-28"
                   />
                   {!readOnly && (
-                    <Button size="sm" variant="ghost" onClick={() => removeItem(index)}>
+                    <Button size="sm" variant="ghost" className="hidden lg:inline-flex" onClick={() => removeItem(index)}>
                       Remove
                     </Button>
                   )}

@@ -350,7 +350,7 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-text-primary">{reference}</h1>
           <p className="text-sm text-text-secondary">
@@ -381,7 +381,7 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
       {canGroup("portVesselContainer") && (
         <Card className="mb-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-secondary">Routing & Vessel</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <Select
               label="Incoterm"
               placeholder="Select..."
@@ -411,7 +411,7 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
               <h2 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wide text-text-secondary">
                 Import Clearance
               </h2>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <Input
                   label="Agent Details"
                   value={form.agentDetails}
@@ -433,7 +433,7 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
               <h2 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wide text-text-secondary">
                 Export Details
               </h2>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <Select
                   label="Export Stuffing Type"
                   placeholder="Select..."
@@ -467,7 +467,7 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
           </div>
 
           <h2 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wide text-text-secondary">Cargo</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <Input label="Commodity" value={form.commodity} onChange={(e) => set("commodity", e.target.value)} disabled={routingDisabled} />
             <Input label="HS Code" value={form.hsCode} onChange={(e) => set("hsCode", e.target.value)} disabled={routingDisabled} />
             <Input
@@ -561,7 +561,7 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
       {showDutyPayment && (
         <Card className="mb-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-secondary">Duty Payment</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <Input
               label="Liability"
               placeholder="Seawave / Consignee / Customer"
@@ -589,7 +589,7 @@ export function JobForm({ job, role, canEdit, canApprove, fieldAccess }: JobForm
       {canGroup("workflowStatus") && (
         <Card className="mb-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-secondary">Delivery</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <Input
               label="Expected Delivery Date"
               type="date"

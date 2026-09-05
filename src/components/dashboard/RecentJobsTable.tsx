@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/shadcn/table";
+import { MobileRowCard } from "@/components/ui/MobileRowCard";
 import { money, shortDate, statusLabel } from "@/components/portal/portal-format";
 import { cn } from "@/lib/utils/cn";
 import type { RecentJobRow } from "@/lib/dashboard/queries";
@@ -36,41 +37,72 @@ export function RecentJobsTable({ rows }: { rows: RecentJobRow[] }) {
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Reference</TableHead>
-          <TableHead>Customer</TableHead>
-          <TableHead>Branch</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Value</TableHead>
-          <TableHead className="text-right">Updated</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <>
+      <div className="hidden lg:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Reference</TableHead>
+              <TableHead>Customer</TableHead>
+              <TableHead>Branch</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Value</TableHead>
+              <TableHead className="text-right">Updated</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="font-medium">
+                  <Link href={`/jobs/${r.id}`} className="text-brand-teal hover:underline">
+                    {r.reference}
+                  </Link>
+                </TableCell>
+                <TableCell className="max-w-[220px] truncate">{r.organizationName}</TableCell>
+                <TableCell>{r.branchName}</TableCell>
+                <TableCell>{statusLabel(r.shipmentType)}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={cn("border-transparent", statusClasses(r.status))}>
+                    {statusLabel(r.status)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {money(r.quotedTotal, r.chargesCurrency ?? "INR")}
+                </TableCell>
+                <TableCell className="text-right text-text-secondary">{shortDate(r.updatedAt.toISOString())}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="flex flex-col gap-3 lg:hidden">
         {rows.map((r) => (
-          <TableRow key={r.id}>
-            <TableCell className="font-medium">
+          <MobileRowCard
+            key={r.id}
+            title={
               <Link href={`/jobs/${r.id}`} className="text-brand-teal hover:underline">
                 {r.reference}
               </Link>
-            </TableCell>
-            <TableCell className="max-w-[220px] truncate">{r.organizationName}</TableCell>
-            <TableCell>{r.branchName}</TableCell>
-            <TableCell>{statusLabel(r.shipmentType)}</TableCell>
-            <TableCell>
-              <Badge variant="outline" className={cn("border-transparent", statusClasses(r.status))}>
-                {statusLabel(r.status)}
-              </Badge>
-            </TableCell>
-            <TableCell className="text-right tabular-nums">
-              {money(r.quotedTotal, r.chargesCurrency ?? "INR")}
-            </TableCell>
-            <TableCell className="text-right text-text-secondary">{shortDate(r.updatedAt.toISOString())}</TableCell>
-          </TableRow>
+            }
+            rows={[
+              { label: "Customer", value: r.organizationName },
+              { label: "Branch", value: r.branchName },
+              { label: "Type", value: statusLabel(r.shipmentType) },
+              {
+                label: "Status",
+                value: (
+                  <Badge variant="outline" className={cn("border-transparent", statusClasses(r.status))}>
+                    {statusLabel(r.status)}
+                  </Badge>
+                ),
+              },
+              { label: "Value", value: money(r.quotedTotal, r.chargesCurrency ?? "INR") },
+              { label: "Updated", value: shortDate(r.updatedAt.toISOString()) },
+            ]}
+          />
         ))}
-      </TableBody>
-    </Table>
+      </div>
+    </>
   );
 }

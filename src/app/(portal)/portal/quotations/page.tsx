@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Badge, Card } from "@/components/ui";
+import { Badge, Card, DataTable } from "@/components/ui";
 import { getPortalContext } from "@/lib/portal/guard";
-import { getPortalQuotations } from "@/lib/portal/queries";
+import { getPortalQuotations, type PortalQuotationListRow } from "@/lib/portal/queries";
 import { PortalPagination } from "@/components/portal/PortalPagination";
 import { money, quotationStatusVariant, shortDate, statusLabel } from "@/components/portal/portal-format";
 
@@ -31,42 +31,31 @@ export default async function PortalQuotationsPage({ searchParams }: PageProps) 
       </form>
 
       <Card>
-        {result.quotations.length === 0 ? (
-          <p className="text-sm text-text-secondary">No quotations yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border-subtle text-left text-text-tertiary">
-                  <th className="py-2 pr-4 font-medium">Reference</th>
-                  <th className="py-2 pr-4 font-medium">Shipments</th>
-                  <th className="py-2 pr-4 font-medium">Version</th>
-                  <th className="py-2 pr-4 font-medium">Total</th>
-                  <th className="py-2 pr-4 font-medium">Updated</th>
-                  <th className="py-2 pr-4 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.quotations.map((qt) => (
-                  <tr key={qt.id} className="border-b border-border-subtle last:border-0">
-                    <td className="py-2 pr-4">
-                      <Link href={`/portal/quotations/${qt.id}`} className="font-medium text-brand-teal underline">
-                        {qt.ref}
-                      </Link>
-                    </td>
-                    <td className="py-2 pr-4">{qt.shipments}</td>
-                    <td className="py-2 pr-4">v{qt.versionNumber}</td>
-                    <td className="py-2 pr-4">{money(qt.total, qt.currency)}</td>
-                    <td className="py-2 pr-4 text-text-tertiary">{shortDate(qt.updatedAt)}</td>
-                    <td className="py-2 pr-4">
-                      <Badge variant={quotationStatusVariant(qt.status)}>{statusLabel(qt.status)}</Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable<PortalQuotationListRow>
+          columns={[
+            {
+              key: "ref",
+              header: "Reference",
+              render: (qt) => (
+                <Link href={`/portal/quotations/${qt.id}`} className="font-medium text-brand-teal underline">
+                  {qt.ref}
+                </Link>
+              ),
+            },
+            { key: "shipments", header: "Shipments" },
+            { key: "versionNumber", header: "Version", render: (qt) => `v${qt.versionNumber}` },
+            { key: "total", header: "Total", render: (qt) => money(qt.total, qt.currency) },
+            { key: "updatedAt", header: "Updated", render: (qt) => shortDate(qt.updatedAt) },
+            {
+              key: "status",
+              header: "Status",
+              render: (qt) => <Badge variant={quotationStatusVariant(qt.status)}>{statusLabel(qt.status)}</Badge>,
+            },
+          ]}
+          data={result.quotations}
+          getRowKey={(qt) => qt.id}
+          emptyMessage="No quotations yet."
+        />
         <PortalPagination
           basePath="/portal/quotations"
           query={{ q: result.q }}

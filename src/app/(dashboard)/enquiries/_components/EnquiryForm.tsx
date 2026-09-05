@@ -310,7 +310,7 @@ export function EnquiryForm({ enquiry, branches, ports, fieldConfig, canEdit, is
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-text-primary">{reference}</h1>
           <p className="text-sm text-text-secondary">Doer: {enquiry.doer.name}</p>
@@ -337,7 +337,7 @@ export function EnquiryForm({ enquiry, branches, ports, fieldConfig, canEdit, is
       )}
 
       <Card className="mb-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <Select
             label="Branch"
             value={form.branchId}
@@ -361,7 +361,7 @@ export function EnquiryForm({ enquiry, branches, ports, fieldConfig, canEdit, is
             }
           />
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
           <Input
             label="Contact Person Name"
             value={form.contactPersonName}

@@ -44,7 +44,7 @@ export function BatchHistoryTable({ batches }: { batches: BatchRow[] }) {
                 </a>
               ) : null,
           },
-          { key: "createdAt", header: "Date", render: (r) => new Date(r.createdAt).toLocaleString() },
+          { key: "createdAt", header: "Date", render: (r) => new Date(r.createdAt).toLocaleString("en-GB") },
         ]}
         data={batches}
         getRowKey={(r) => r.id}

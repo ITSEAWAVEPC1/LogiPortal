@@ -114,7 +114,7 @@ export function DocumentsBrowser({
             {
               key: "updated",
               header: "Updated",
-              render: (d: DocumentCard) => new Date(d.updatedAt).toLocaleDateString(),
+              render: (d: DocumentCard) => new Date(d.updatedAt).toLocaleDateString("en-GB"),
             },
             {
               key: "open",

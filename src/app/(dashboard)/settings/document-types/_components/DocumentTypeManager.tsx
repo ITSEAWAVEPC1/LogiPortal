@@ -70,7 +70,7 @@ export function DocumentTypeManager({ documentTypes }: { documentTypes: Document
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-text-primary">Document Types</h1>
           <p className="text-sm text-text-secondary">

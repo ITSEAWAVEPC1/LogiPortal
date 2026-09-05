@@ -141,7 +141,7 @@ export function WorkflowPanel({ jobId }: { jobId: string }) {
         </Card>
       )}
 
-      <div className="grid gap-4 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
         <Card>
           <WorkflowRail
             steps={data.progress}

@@ -121,13 +121,13 @@ export function JobList({
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">
           Freight Forwarding
           {initialQuery.shipmentType === "IMPORT" && " — Imports"}
           {initialQuery.shipmentType === "EXPORT" && " — Exports"}
         </h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {canImport && (
             <Link href="/jobs/import">
               <Button variant="ghost">Import Historical Jobs</Button>
@@ -216,7 +216,7 @@ export function JobList({
             header: "Status",
             render: (row) => <Badge variant={STATUS_BADGE_VARIANT[row.status]}>{row.status.replace(/_/g, " ")}</Badge>,
           },
-          { key: "createdAt", header: "Created", render: (row) => new Date(row.createdAt).toLocaleDateString() },
+          { key: "createdAt", header: "Created", render: (row) => new Date(row.createdAt).toLocaleDateString("en-GB") },
           {
             key: "actions",
             header: "",

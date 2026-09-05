@@ -72,7 +72,7 @@ export function BranchManager({ branches }: BranchManagerProps) {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">Branches</h1>
         <Button onClick={openCreate}>New Branch</Button>
       </div>
