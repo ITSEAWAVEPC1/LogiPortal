@@ -94,9 +94,9 @@ export function OrganizationEditor({
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">{mode === "edit" ? "Edit Customer" : "New Customer"}</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="ghost" onClick={() => router.push("/customers")}>
             Cancel
           </Button>

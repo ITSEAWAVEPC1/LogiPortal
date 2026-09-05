@@ -8,6 +8,7 @@ export * from "./Textarea";
 export * from "./Checkbox";
 export * from "./Radio";
 export * from "./DataTable";
+export * from "./MobileRowCard";
 export * from "./StepTracker";
 export * from "./FileDropzone";
 export * from "./Combobox";

@@ -113,7 +113,7 @@ export function QuotationList({ quotations, branches, initialQuery, canCreate, c
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">Quotations</h1>
         {canCreate && (
           <Link href="/quotations/new">
@@ -184,7 +184,7 @@ export function QuotationList({ quotations, branches, initialQuery, canCreate, c
             header: "Status",
             render: (row) => <Badge variant={STATUS_BADGE_VARIANT[row.status]}>{row.status.replace(/_/g, " ")}</Badge>,
           },
-          { key: "createdAt", header: "Created", render: (row) => new Date(row.createdAt).toLocaleDateString() },
+          { key: "createdAt", header: "Created", render: (row) => new Date(row.createdAt).toLocaleDateString("en-GB") },
           {
             key: "actions",
             header: "",
