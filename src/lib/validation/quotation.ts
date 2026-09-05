@@ -63,3 +63,32 @@ export const reviewSchema = z.object({
 export const customerApprovalSchema = z.object({
   note: z.string().trim().optional(),
 });
+
+// Stage 14c — cost-working sheet. buyRateInr / sellRate / amount are always
+// recomputed server-side from the other fields (cost-sheet-math.ts), so a
+// client-supplied value is only a hint; description is required, the rest
+// optional. "Prepare Quotation" turns each line's sell side into a
+// QuotationLineItem.
+const costLineSchema = z.object({
+  category: z.enum(["FREIGHT", "CUSTOMS_CLEARANCE", "TRANSPORTATION", "REIMBURSEMENT"]),
+  description: z.string().trim().min(1, "Description is required"),
+  vendorName: z.string().trim().nullable().optional(),
+  buyRate: z.number().nullable().optional(),
+  buyCurrency: z.string().trim().min(1).optional(),
+  buyExchangeRate: z.number().nullable().optional(),
+  buyRateInr: z.number().nullable().optional(),
+  marginPct: z.number().nullable().optional(),
+  marginFlat: z.number().nullable().optional(),
+  sellRate: z.number().nullable().optional(),
+  quantity: z.number().nullable().optional(),
+  amount: z.number().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export type QuotationCostLineInput = z.infer<typeof costLineSchema>;
+
+export const costSheetReplaceSchema = z.object({
+  defaultMarginPct: z.number().nullable().optional(),
+  notes: z.string().trim().nullable().optional(),
+  costLines: z.array(costLineSchema),
+});

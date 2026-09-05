@@ -55,6 +55,15 @@ export default async function QuotationDetailPage({ params }: QuotationDetailPag
   if (!currentVersion) notFound();
 
   const canEdit = can(session.user.role, "quotations", "edit");
+  const canViewCosts = can(session.user.role, "quotationCosts", "view");
+  const canEditCosts = can(session.user.role, "quotationCosts", "edit");
+
+  const costSheetRow = canViewCosts
+    ? await prisma.quotationCostSheet.findUnique({
+        where: { quotationId: quotation.id },
+        include: { costLines: { orderBy: [{ category: "asc" }, { sortOrder: "asc" }] } },
+      })
+    : null;
 
   return (
     <QuotationDetail
@@ -65,6 +74,14 @@ export default async function QuotationDetailPage({ params }: QuotationDetailPag
       quotation={quotation}
       lineItems={lineItems}
       canEdit={canEdit}
+      canViewCosts={canViewCosts}
+      canEditCosts={canEditCosts}
+      costSheet={{
+        defaultMarginPct: costSheetRow?.defaultMarginPct ?? null,
+        notes: costSheetRow?.notes ?? "",
+        costLines: costSheetRow?.costLines ?? [],
+      }}
+      costSheetPreparedAt={costSheetRow?.preparedAt ?? null}
     />
   );
 }

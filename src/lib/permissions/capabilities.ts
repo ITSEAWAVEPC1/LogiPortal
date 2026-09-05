@@ -20,6 +20,11 @@ export type CapabilityScreen =
   | "ports"
   | "enquiryFieldConfig"
   | "quotations"
+  // Stage 14c — the cost-working sheet inside a quotation (buy rates + margin).
+  // Separate screen because buy rates are commercially sensitive: DOER (who has
+  // quotations:["view"]) must not see them, ACCOUNTS gets read-only. No nav
+  // item — it's a card on the quotation detail page.
+  | "quotationCosts"
   | "jobs"
   | "workflowTemplates"
   | "documents"
@@ -45,6 +50,7 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     // capability check needed for that read path).
     enquiryFieldConfig: ["view", "edit"],
     quotations: ["view", "create", "edit", "approve"],
+    quotationCosts: ["view", "edit"],
     jobs: ["view", "create", "edit", "approve"],
     // Stage 5: the workflow-template admin screen — corrections without a
     // code deploy (plan failover requirement). Admin-only; every other role
@@ -64,6 +70,7 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     branches: ["view"],
     enquiries: ["view", "edit", "approve"],
     quotations: ["view", "edit", "approve"],
+    quotationCosts: ["view", "edit"],
     // Section 4.2 "Jobs" row: Edit/Override + the final-review approval gate.
     jobs: ["view", "edit", "approve"],
     // §4.3 Documents row: "Approve" — the Branch Manager reviews and shares
@@ -85,6 +92,7 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     customers: ["view", "create", "edit"],
     enquiries: ["view", "create", "edit"],
     quotations: ["view", "create", "edit"],
+    quotationCosts: ["view", "edit"],
     jobs: ["view"],
     // §4.3 Documents row: "View (non-financial docs)" — the isFinancial
     // filter is applied by document-access.ts.
@@ -97,6 +105,9 @@ const CAPABILITIES: Record<Role, Partial<Record<CapabilityScreen, Action[]>>> = 
     // Quotations the way Section 4.3 defines one for Jobs, so plain
     // view-only at the whole-quotation level is the correct-scope default.
     quotations: ["view"],
+    // Stage 14c — Accounts sees the cost sheet (margin visibility) read-only;
+    // no edit.
+    quotationCosts: ["view"],
     // Section 4.2: "View + edit billing sections". Whole-screen "edit" is
     // granted so Accounts can reach the Job at all; the Section 4.3
     // field-group gate (field-permissions.ts, resource "job") then confines

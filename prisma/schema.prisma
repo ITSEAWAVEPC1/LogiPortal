@@ -950,6 +950,7 @@ model Quotation {
 
   enquiries QuotationEnquiry[]
   versions  QuotationVersion[]
+  costSheet QuotationCostSheet? // Stage 14c
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1044,6 +1045,69 @@ model QuotationLineItem {
 
   @@index([quotationVersionId])
   @@map("quotation_line_items")
+}
+
+// ---------------------------------------------------------------------------
+// Stage 14c — Cost-working sheet. One sheet per Quotation (1:1 sidecar, house
+// style). Each cost line captures the vendor buy rate + margin; "Prepare
+// Quotation" (POST /api/quotations/[id]/prepare) generates the customer-facing
+// QuotationLineItem rows on the current version from these (sell side only —
+// buy rates are never shown to the customer / portal). See stage-14c.md.
+// ---------------------------------------------------------------------------
+
+model QuotationCostSheet {
+  id          String    @id @default(cuid())
+  quotationId String    @unique
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  // Applied to any cost line whose own marginPct is null.
+  defaultMarginPct Float?
+  notes            String?
+  // Stamped by /prepare — powers the "charges were edited after the last
+  // generate" confirm before a re-prepare.
+  preparedAt DateTime?
+
+  costLines QuotationCostLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("quotation_cost_sheets")
+}
+
+model QuotationCostLine {
+  id          String             @id @default(cuid())
+  costSheetId String
+  costSheet   QuotationCostSheet @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
+
+  category    QuotationChargeCategory
+  description String
+  vendorName  String?
+
+  // Buy side (internal only). buyRateInr is computed server-side:
+  //   INR -> buyRate;  else buyRate * buyExchangeRate.
+  buyRate         Float?
+  buyCurrency     String  @default("INR")
+  buyExchangeRate Float?
+  buyRateInr      Float?
+
+  // Margin is additive: sellRate = buyRateInr * (1 + (marginPct ??
+  // defaultMarginPct ?? 0)/100) + (marginFlat ?? 0). Both computed
+  // server-side but stay client-editable (manual override sticks until a
+  // dependency changes).
+  marginPct  Float?
+  marginFlat Float?
+  sellRate   Float?
+
+  quantity  Float?
+  amount    Float @default(0) // quantity * sellRate
+  sortOrder Int   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([costSheetId])
+  @@map("quotation_cost_lines")
 }
 
 // ---------------------------------------------------------------------------

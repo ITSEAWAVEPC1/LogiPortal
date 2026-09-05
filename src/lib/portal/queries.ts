@@ -224,6 +224,10 @@ export async function getPortalJob(id: string, ctx: PortalContext, path: string)
 
 // --- Quotations ---------------------------------------------------------
 
+// Note: the Stage 14c cost sheet (QuotationCostSheet / QuotationCostLine) holds
+// vendor buy rates + margin and is DELIBERATELY never selected here — the
+// customer portal only ever sees the sell-side line items.
+
 const QUOTATION_LIST_SELECT = {
   id: true,
   sequenceNumber: true,

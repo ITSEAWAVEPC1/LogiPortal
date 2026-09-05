@@ -8,6 +8,7 @@ import { formatEnquiryRef } from "@/lib/validation/enquiry";
 import { formatQuotationRef, type QuotationLineItemInput } from "@/lib/validation/quotation";
 import { useAutosave } from "@/lib/hooks/useAutosave";
 import { LineItemsEditor } from "./LineItemsEditor";
+import { CostSheetEditor, type CostSheetState } from "./CostSheetEditor";
 import { QuotationHtmlPreview } from "@/components/quotations/QuotationHtmlPreview";
 import type { QuotationPdfData } from "@/lib/pdf/types";
 
@@ -89,6 +90,9 @@ function pipelineIndex(status: QuotationStatus): number {
 // an edit made after approval clones a new version server-side.
 const LINE_ITEMS_LOCKED_STATUSES: QuotationStatus[] = ["PENDING_APPROVAL", "CONVERTED"];
 
+// The cost sheet is editable only while the quotation is still being worked up.
+const COST_SHEET_EDITABLE_STATUSES: QuotationStatus[] = ["FLOATED", "COST_WORKING", "QUOTATION_PREPARED"];
+
 interface EnquirySummary {
   id: string;
   sequenceNumber: number;
@@ -134,11 +138,26 @@ interface QuotationDetailProps {
   };
   lineItems: QuotationLineItemInput[];
   canEdit: boolean;
+  canViewCosts: boolean;
+  canEditCosts: boolean;
+  costSheet: CostSheetState;
+  costSheetPreparedAt: string | Date | null;
 }
 
-export function QuotationDetail({ quotation, lineItems, canEdit }: QuotationDetailProps) {
+export function QuotationDetail({
+  quotation,
+  lineItems,
+  canEdit,
+  canViewCosts,
+  canEditCosts,
+  costSheet,
+  costSheetPreparedAt,
+}: QuotationDetailProps) {
   const router = useRouter();
   const [items, setItems] = useState<QuotationLineItemInput[]>(lineItems);
+  const [sheet, setSheet] = useState<CostSheetState>(costSheet);
+  const [confirmPrepare, setConfirmPrepare] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pdfPreview, setPdfPreview] = useState<QuotationPdfData | null>(null);
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null);
@@ -146,6 +165,7 @@ export function QuotationDetail({ quotation, lineItems, canEdit }: QuotationDeta
   const [loadingVersion, setLoadingVersion] = useState<number | null>(null);
 
   const editable = canEdit && !LINE_ITEMS_LOCKED_STATUSES.includes(quotation.status);
+  const costSheetEditable = canEditCosts && COST_SHEET_EDITABLE_STATUSES.includes(quotation.status);
   const availableCategories = availableCategoriesFor(quotation.enquiries.flatMap((qe) => qe.enquiry.serviceTypes));
 
   const { status: saveStatus } = useAutosave(
@@ -164,6 +184,46 @@ export function QuotationDetail({ quotation, lineItems, canEdit }: QuotationDeta
     },
     { enabled: editable },
   );
+
+  const { status: costSaveStatus } = useAutosave(
+    {
+      defaultMarginPct: sheet.defaultMarginPct,
+      notes: sheet.notes,
+      costLines: sheet.costLines.map((line, index) => ({ ...line, sortOrder: index })),
+    },
+    async (value) => {
+      const res = await fetch(`/api/quotations/${quotation.id}/cost-sheet`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(value),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Cost sheet save failed");
+      }
+      router.refresh();
+    },
+    { enabled: costSheetEditable },
+  );
+
+  async function handlePrepare() {
+    if (costSheetPreparedAt && !confirmPrepare) {
+      setConfirmPrepare(true);
+      return;
+    }
+    setConfirmPrepare(false);
+    setPreparing(true);
+    setActionError(null);
+    const res = await fetch(`/api/quotations/${quotation.id}/prepare`, { method: "POST" });
+    setPreparing(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setActionError(body.error ?? "Prepare failed");
+      return;
+    }
+    toast.success("Quotation prepared from the cost sheet");
+    router.refresh();
+  }
 
   async function toggleVersionHistory(versionNumber: number) {
     if (expandedVersion === versionNumber) {
@@ -295,6 +355,54 @@ export function QuotationDetail({ quotation, lineItems, canEdit }: QuotationDeta
           ))}
         </ul>
       </Card>
+
+      {canViewCosts && (
+        <Card>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-text-primary">Cost Working</h2>
+            <div className="flex items-center gap-3">
+              {costSheetEditable && (
+                <span className="text-xs text-text-tertiary">
+                  {costSaveStatus === "saving"
+                    ? "Saving..."
+                    : costSaveStatus === "saved"
+                      ? "Saved"
+                      : costSaveStatus === "error"
+                        ? "Save failed"
+                        : ""}
+                </span>
+              )}
+              {costSheetEditable && !confirmPrepare && (
+                <Button size="sm" onClick={handlePrepare} disabled={preparing || sheet.costLines.length === 0}>
+                  {preparing ? "Preparing..." : "Prepare Quotation"}
+                </Button>
+              )}
+              {confirmPrepare && (
+                <span className="flex items-center gap-2 text-xs">
+                  <span className="text-status-danger-fg">Replaces all charge lines. Continue?</span>
+                  <Button size="sm" onClick={handlePrepare} disabled={preparing}>
+                    Confirm
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmPrepare(false)}>
+                    Cancel
+                  </Button>
+                </span>
+              )}
+            </div>
+          </div>
+          {costSheetPreparedAt && (
+            <p className="mb-2 text-xs text-text-tertiary">
+              Charges last generated from this cost sheet on {new Date(costSheetPreparedAt).toLocaleString("en-GB")}.
+            </p>
+          )}
+          <CostSheetEditor
+            value={sheet}
+            onChange={setSheet}
+            readOnly={!costSheetEditable}
+            availableCategories={availableCategories}
+          />
+        </Card>
+      )}
 
       <Card>
         <div className="mb-3 flex items-center justify-between">
