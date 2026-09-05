@@ -3,12 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Badge, Button, Card, Textarea } from "@/components/ui";
+import { Badge, Button, Card, StepTracker, type Step } from "@/components/ui";
 import { formatEnquiryRef } from "@/lib/validation/enquiry";
 import { formatQuotationRef, type QuotationLineItemInput } from "@/lib/validation/quotation";
 import { useAutosave } from "@/lib/hooks/useAutosave";
 import { LineItemsEditor } from "./LineItemsEditor";
-import { ReviewModal } from "./ReviewModal";
 import { QuotationHtmlPreview } from "@/components/quotations/QuotationHtmlPreview";
 import type { QuotationPdfData } from "@/lib/pdf/types";
 
@@ -33,27 +32,61 @@ function escapeHtml(value: string): string {
 }
 
 type QuotationStatus =
+  // Stage 14b pipeline
+  | "FLOATED"
+  | "COST_WORKING"
+  | "QUOTATION_PREPARED"
+  | "APPROVED"
+  | "CONVERTED"
+  // legacy (pre-14b)
   | "DRAFT"
   | "PENDING_APPROVAL"
   | "NEEDS_CORRECTION"
-  | "APPROVED"
   | "SENT"
-  | "CUSTOMER_APPROVED"
-  | "CONVERTED";
+  | "CUSTOMER_APPROVED";
 
 const STATUS_BADGE_VARIANT: Record<QuotationStatus, "pending" | "active" | "danger" | "success" | "neutral"> = {
+  FLOATED: "pending",
+  COST_WORKING: "active",
+  QUOTATION_PREPARED: "active",
+  APPROVED: "success",
+  CONVERTED: "neutral",
   DRAFT: "pending",
   PENDING_APPROVAL: "active",
   NEEDS_CORRECTION: "danger",
-  APPROVED: "success",
   SENT: "success",
   CUSTOMER_APPROVED: "success",
-  CONVERTED: "neutral",
 };
 
-// Line items stay editable in every status except while a Branch Manager
-// review is pending, or once the quotation is fully converted — an edit made
-// after approval clones a new version server-side rather than being blocked.
+// Steps for the pipeline tracker, in order. The current index is derived from
+// status (legacy statuses map onto the nearest pipeline step).
+const PIPELINE_STEPS = ["Float Enquiry", "Cost Working", "Quotation Prepared", "Approved", "Converted"] as const;
+
+function pipelineIndex(status: QuotationStatus): number {
+  switch (status) {
+    case "FLOATED":
+    case "DRAFT":
+      return 0;
+    case "COST_WORKING":
+      return 1;
+    case "QUOTATION_PREPARED":
+    case "PENDING_APPROVAL":
+    case "NEEDS_CORRECTION":
+      return 2;
+    case "APPROVED":
+    case "SENT":
+    case "CUSTOMER_APPROVED":
+      return 3;
+    case "CONVERTED":
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+// Line items stay editable in every status except once the quotation is fully
+// converted (or, for legacy rows, while a Branch Manager review is pending) —
+// an edit made after approval clones a new version server-side.
 const LINE_ITEMS_LOCKED_STATUSES: QuotationStatus[] = ["PENDING_APPROVAL", "CONVERTED"];
 
 interface EnquirySummary {
@@ -101,15 +134,11 @@ interface QuotationDetailProps {
   };
   lineItems: QuotationLineItemInput[];
   canEdit: boolean;
-  canApprove: boolean;
 }
 
-export function QuotationDetail({ quotation, lineItems, canEdit, canApprove }: QuotationDetailProps) {
+export function QuotationDetail({ quotation, lineItems, canEdit }: QuotationDetailProps) {
   const router = useRouter();
   const [items, setItems] = useState<QuotationLineItemInput[]>(lineItems);
-  const [flagBackOpen, setFlagBackOpen] = useState(false);
-  const [customerNoteOpen, setCustomerNoteOpen] = useState(false);
-  const [customerNote, setCustomerNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [pdfPreview, setPdfPreview] = useState<QuotationPdfData | null>(null);
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null);
@@ -243,6 +272,16 @@ export function QuotationDetail({ quotation, lineItems, canEdit, canApprove }: Q
         <Badge variant={STATUS_BADGE_VARIANT[quotation.status]}>{quotation.status.replace(/_/g, " ")}</Badge>
       </div>
 
+      <Card>
+        <StepTracker
+          orientation="horizontal"
+          steps={PIPELINE_STEPS.map((label, i): Step => {
+            const idx = pipelineIndex(quotation.status);
+            return { id: label, label, status: i < idx ? "completed" : i === idx ? "active" : "pending" };
+          })}
+        />
+      </Card>
+
       {actionError && <p className="text-sm text-status-danger-fg">{actionError}</p>}
 
       <Card>
@@ -270,22 +309,10 @@ export function QuotationDetail({ quotation, lineItems, canEdit, canApprove }: Q
       </Card>
 
       <Card className="flex flex-wrap items-center gap-2">
-        {canEdit && (quotation.status === "DRAFT" || quotation.status === "NEEDS_CORRECTION") && (
-          <Button onClick={() => runAction("submit")}>Submit for Review</Button>
+        {canEdit && quotation.status === "QUOTATION_PREPARED" && (
+          <Button onClick={() => runAction("approve")}>Mark Approved</Button>
         )}
-        {canApprove && quotation.status === "PENDING_APPROVAL" && (
-          <>
-            <Button variant="ghost" onClick={() => setFlagBackOpen(true)}>
-              Flag Back
-            </Button>
-            <Button onClick={() => runAction("review", { decision: "approve" })}>Approve</Button>
-          </>
-        )}
-        {canEdit && quotation.status === "APPROVED" && <Button onClick={() => runAction("send")}>Mark Sent</Button>}
-        {canEdit && quotation.status === "SENT" && !customerNoteOpen && (
-          <Button onClick={() => setCustomerNoteOpen(true)}>Record Customer Approval</Button>
-        )}
-        {canEdit && quotation.status === "CUSTOMER_APPROVED" && (
+        {canEdit && quotation.status === "APPROVED" && (
           <Button onClick={() => runAction("convert")}>Convert to Job(s)</Button>
         )}
         <Button variant="ghost" onClick={handlePdfDownload}>
@@ -295,33 +322,6 @@ export function QuotationDetail({ quotation, lineItems, canEdit, canApprove }: Q
           Copy for Email
         </Button>
       </Card>
-
-      {customerNoteOpen && (
-        <Card className="flex flex-col gap-3">
-          <Textarea
-            label="Customer approval note (optional)"
-            value={customerNote}
-            onChange={(e) => setCustomerNote(e.target.value)}
-            rows={3}
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setCustomerNoteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                const ok = await runAction("customer-approval", { note: customerNote || undefined });
-                if (ok) {
-                  setCustomerNoteOpen(false);
-                  setCustomerNote("");
-                }
-              }}
-            >
-              Confirm Customer Approval
-            </Button>
-          </div>
-        </Card>
-      )}
 
       {quotation.reviewNote && (
         <Card>
@@ -372,24 +372,6 @@ export function QuotationDetail({ quotation, lineItems, canEdit, canApprove }: Q
           ))}
         </div>
       </Card>
-
-      <ReviewModal
-        open={flagBackOpen}
-        onClose={() => setFlagBackOpen(false)}
-        onSubmit={async (note) => {
-          const res = await fetch(`/api/quotations/${quotation.id}/review`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ decision: "needs_correction", note }),
-          });
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.error ?? "Flag back failed");
-          }
-          setFlagBackOpen(false);
-          router.refresh();
-        }}
-      />
 
       {pdfPreview && (
         <div>

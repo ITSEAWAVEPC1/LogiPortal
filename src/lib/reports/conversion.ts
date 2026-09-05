@@ -48,14 +48,18 @@ export async function conversionReport(scope: Scope, filters: ReportFilters): Pr
     (e) => e.status === "READY_FOR_QUOTATION" || e.quotationEnquiry !== null,
   ).length;
 
-  const SENT = new Set(["SENT", "CUSTOMER_APPROVED", "CONVERTED"]);
-  const isSent = (q: (typeof quotations)[number]) => q.sentAt !== null || SENT.has(q.status);
-  const isCustomerApproved = (q: (typeof quotations)[number]) =>
-    q.customerApproved || q.status === "CUSTOMER_APPROVED" || q.status === "CONVERTED";
+  // Stage 14b — the pipeline has no SENT/CUSTOMER_APPROVED step; a quote
+  // reaching QUOTATION_PREPARED is the "a quotation exists and the customer
+  // can see it" milestone, and APPROVED is the internal sign-off. Legacy
+  // statuses (+ sentAt/customerApproved flags) still count for pre-14b rows.
+  const PRODUCED = new Set(["QUOTATION_PREPARED", "APPROVED", "SENT", "CUSTOMER_APPROVED", "CONVERTED"]);
+  const APPROVED = new Set(["APPROVED", "SENT", "CUSTOMER_APPROVED", "CONVERTED"]);
+  const isProduced = (q: (typeof quotations)[number]) => q.sentAt !== null || PRODUCED.has(q.status);
+  const isApproved = (q: (typeof quotations)[number]) => q.customerApproved || APPROVED.has(q.status);
   const isConverted = (q: (typeof quotations)[number]) => q.convertedAt !== null || q.status === "CONVERTED";
 
-  const quotationsSent = quotations.filter(isSent).length;
-  const quotationsCustomerApproved = quotations.filter(isCustomerApproved).length;
+  const quotationsProduced = quotations.filter(isProduced).length;
+  const quotationsApproved = quotations.filter(isApproved).length;
   const quotationsConverted = quotations.filter(isConverted).length;
 
   const rate = (num: number, den: number) => (den === 0 ? "—" : `${((num / den) * 100).toFixed(1)}%`);
@@ -63,13 +67,13 @@ export async function conversionReport(scope: Scope, filters: ReportFilters): Pr
   const funnel = [
     { stage: "Enquiries created", count: enquiriesCreated, fromPrev: "—" },
     { stage: "Ready for quotation", count: enquiriesQuoted, fromPrev: rate(enquiriesQuoted, enquiriesCreated) },
-    { stage: "Quotations sent", count: quotationsSent, fromPrev: rate(quotationsSent, enquiriesQuoted) },
+    { stage: "Quotations prepared", count: quotationsProduced, fromPrev: rate(quotationsProduced, enquiriesQuoted) },
     {
-      stage: "Customer approved",
-      count: quotationsCustomerApproved,
-      fromPrev: rate(quotationsCustomerApproved, quotationsSent),
+      stage: "Approved",
+      count: quotationsApproved,
+      fromPrev: rate(quotationsApproved, quotationsProduced),
     },
-    { stage: "Converted to job", count: quotationsConverted, fromPrev: rate(quotationsConverted, quotationsCustomerApproved) },
+    { stage: "Converted to job", count: quotationsConverted, fromPrev: rate(quotationsConverted, quotationsApproved) },
   ];
 
   // --- win rate by month (converted / sent, by quotation.createdAt) ---
@@ -79,7 +83,7 @@ export async function conversionReport(scope: Scope, filters: ReportFilters): Pr
   for (const q of quotations) {
     const r = mByKey.get(bucketKeyForDate(q.createdAt));
     if (!r) continue;
-    if (isSent(q)) r.sent += 1;
+    if (isProduced(q)) r.sent += 1;
     if (isConverted(q)) r.converted += 1;
   }
 
@@ -94,7 +98,7 @@ export async function conversionReport(scope: Scope, filters: ReportFilters): Pr
       total: {
         stage: "Overall win rate",
         count: quotationsConverted,
-        fromPrev: rate(quotationsConverted, quotationsSent),
+        fromPrev: rate(quotationsConverted, quotationsProduced),
       },
     },
     chart: {
@@ -106,6 +110,6 @@ export async function conversionReport(scope: Scope, filters: ReportFilters): Pr
       })),
       series: [{ key: "winRate", label: "Win rate %", color: "var(--chart-1)" }],
     },
-    note: "Win rate = converted ÷ sent quotations, by quotation month.",
+    note: "Win rate = converted ÷ prepared quotations, by quotation month.",
   };
 }

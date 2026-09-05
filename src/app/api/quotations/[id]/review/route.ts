@@ -6,6 +6,10 @@ import { formatQuotationRef, reviewSchema } from "@/lib/validation/quotation";
 import { fireAfterResponse } from "@/lib/notifications/fire";
 import { quotationReviewed } from "@/lib/notifications/events";
 
+// DEAD as of Stage 14b — the new pipeline dropped the Branch Manager approval
+// gate. Left in place, still callable, for any legacy pre-14b quotation stuck
+// in PENDING_APPROVAL.
+//
 // Branch Manager's approval gate: PENDING_APPROVAL -> APPROVED or
 // NEEDS_CORRECTION. On approve, also stamps the *version* (approvedById/At)
 // so approval history survives future versions cloned off it.

@@ -55,7 +55,6 @@ export default async function QuotationDetailPage({ params }: QuotationDetailPag
   if (!currentVersion) notFound();
 
   const canEdit = can(session.user.role, "quotations", "edit");
-  const canApprove = can(session.user.role, "quotations", "approve");
 
   return (
     <QuotationDetail
@@ -66,7 +65,6 @@ export default async function QuotationDetailPage({ params }: QuotationDetailPag
       quotation={quotation}
       lineItems={lineItems}
       canEdit={canEdit}
-      canApprove={canApprove}
     />
   );
 }

@@ -260,13 +260,18 @@ function toQuotationListRow(qt: QuotationListRaw) {
 export type PortalQuotationListRow = ReturnType<typeof toQuotationListRow>;
 
 const QUOTATION_STATUS_VALUES = [
+  // Stage 14b pipeline
+  "FLOATED",
+  "COST_WORKING",
+  "QUOTATION_PREPARED",
+  "APPROVED",
+  "CONVERTED",
+  // legacy (pre-14b)
   "DRAFT",
   "PENDING_APPROVAL",
   "NEEDS_CORRECTION",
-  "APPROVED",
   "SENT",
   "CUSTOMER_APPROVED",
-  "CONVERTED",
 ] as const;
 
 export async function getPortalQuotations(
@@ -374,7 +379,14 @@ export async function getPortalDashboard(orgId: string | null) {
   const [jobsTotal, jobsOngoing, quotationsAwaiting, documentsShared, recent] = await Promise.all([
     prisma.job.count({ where: { organizationId: orgId } }),
     prisma.job.count({ where: { organizationId: orgId, status: "WORKFLOW_IN_PROGRESS" } }),
-    prisma.quotation.count({ where: { organizationId: orgId, status: { in: ["SENT", "CUSTOMER_APPROVED"] } } }),
+    // Stage 14b — the pipeline notifies the customer at QUOTATION_PREPARED/
+    // APPROVED (no SENT/CUSTOMER_APPROVED step); keep the legacy values too.
+    prisma.quotation.count({
+      where: {
+        organizationId: orgId,
+        status: { in: ["QUOTATION_PREPARED", "APPROVED", "SENT", "CUSTOMER_APPROVED"] },
+      },
+    }),
     prisma.document.count({ where: buildDocumentListWhere("CUSTOMER", orgId) }),
     prisma.job.findMany({
       where: { organizationId: orgId },

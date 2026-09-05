@@ -881,6 +881,13 @@ enum QuotationStatus {
   SENT
   CUSTOMER_APPROVED
   CONVERTED
+  // Stage 14b — new Sales-driven pipeline (no Branch Manager gate):
+  //   FLOATED -> COST_WORKING -> QUOTATION_PREPARED -> APPROVED -> CONVERTED
+  // DRAFT/PENDING_APPROVAL/NEEDS_CORRECTION/SENT/CUSTOMER_APPROVED are legacy
+  // — kept so pre-14b rows still render; no new quotation enters them.
+  FLOATED
+  COST_WORKING
+  QUOTATION_PREPARED
 }
 
 enum QuotationChargeCategory {

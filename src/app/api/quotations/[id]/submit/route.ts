@@ -6,6 +6,10 @@ import { formatQuotationRef } from "@/lib/validation/quotation";
 import { fireAfterResponse } from "@/lib/notifications/fire";
 import { quotationSubmitted } from "@/lib/notifications/events";
 
+// DEAD as of Stage 14b — the new pipeline has no PENDING_APPROVAL / Branch
+// Manager gate (QUOTATION_PREPARED -> APPROVED via /approve instead). Left in
+// place, still callable, for any legacy pre-14b quotation.
+//
 // Strict submit transition, DRAFT|NEEDS_CORRECTION -> PENDING_APPROVAL.
 // Re-validates from the DB's current state (the current version must have
 // at least one line item) rather than trusting the request body.

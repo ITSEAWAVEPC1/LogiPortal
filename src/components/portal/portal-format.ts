@@ -29,6 +29,8 @@ export function quotationStatusVariant(status: string): BadgeVariant {
     case "CONVERTED":
       return "success";
     case "SENT":
+    case "COST_WORKING":
+    case "QUOTATION_PREPARED":
       return "active";
     case "NEEDS_CORRECTION":
       return "warning";

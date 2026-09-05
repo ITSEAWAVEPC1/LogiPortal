@@ -8,13 +8,18 @@ import { formatQuotationRef } from "@/lib/validation/quotation";
 import { ReviewModal } from "./ReviewModal";
 
 type QuotationStatus =
+  // Stage 14b pipeline
+  | "FLOATED"
+  | "COST_WORKING"
+  | "QUOTATION_PREPARED"
+  | "APPROVED"
+  | "CONVERTED"
+  // legacy (pre-14b)
   | "DRAFT"
   | "PENDING_APPROVAL"
   | "NEEDS_CORRECTION"
-  | "APPROVED"
   | "SENT"
-  | "CUSTOMER_APPROVED"
-  | "CONVERTED";
+  | "CUSTOMER_APPROVED";
 
 interface QuotationRow {
   id: string;
@@ -43,23 +48,30 @@ interface QuotationListProps {
 }
 
 const STATUS_TABS = [
+  { value: "FLOATED", label: "Float Enquiry" },
+  { value: "COST_WORKING", label: "Cost Working" },
+  { value: "QUOTATION_PREPARED", label: "Quotation Prepared" },
+  { value: "APPROVED", label: "Approved" },
+  { value: "CONVERTED", label: "Converted" },
+  // legacy (pre-14b) — kept one release so old rows stay reachable
   { value: "DRAFT", label: "Draft" },
   { value: "PENDING_APPROVAL", label: "Pending Approval" },
   { value: "NEEDS_CORRECTION", label: "Needs Correction" },
-  { value: "APPROVED", label: "Approved" },
   { value: "SENT", label: "Sent" },
   { value: "CUSTOMER_APPROVED", label: "Customer Approved" },
-  { value: "CONVERTED", label: "Converted" },
 ];
 
 const STATUS_BADGE_VARIANT: Record<QuotationStatus, "pending" | "active" | "danger" | "success" | "neutral"> = {
+  FLOATED: "pending",
+  COST_WORKING: "active",
+  QUOTATION_PREPARED: "active",
+  APPROVED: "success",
+  CONVERTED: "neutral",
   DRAFT: "pending",
   PENDING_APPROVAL: "active",
   NEEDS_CORRECTION: "danger",
-  APPROVED: "success",
   SENT: "success",
   CUSTOMER_APPROVED: "success",
-  CONVERTED: "neutral",
 };
 
 export function QuotationList({ quotations, branches, initialQuery, canCreate, canApprove }: QuotationListProps) {

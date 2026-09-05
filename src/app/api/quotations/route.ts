@@ -7,13 +7,18 @@ import { allocateRfqReference, inheritRfqReference } from "@/lib/reference/gener
 import type { Prisma } from "@/generated/prisma/client";
 
 const STATUS_VALUES = [
+  // Stage 14b pipeline
+  "FLOATED",
+  "COST_WORKING",
+  "QUOTATION_PREPARED",
+  "APPROVED",
+  "CONVERTED",
+  // legacy (pre-14b) — kept so their tabs/filters still resolve
   "DRAFT",
   "PENDING_APPROVAL",
   "NEEDS_CORRECTION",
-  "APPROVED",
   "SENT",
   "CUSTOMER_APPROVED",
-  "CONVERTED",
 ] as const;
 
 export async function GET(request: NextRequest) {
@@ -105,7 +110,9 @@ export async function POST(request: NextRequest) {
           organizationId,
           branchId: enquiry.branchId,
           createdById: session.user.id,
-          status: "DRAFT",
+          // Stage 14b — new quotations start FLOATED (enquiry attached, no
+          // costing done yet), not DRAFT.
+          status: "FLOATED",
           currentVersionNumber: 1,
           referenceNo: ref.referenceNo,
           refYear: ref.refYear,

@@ -10,13 +10,18 @@ interface QuotationsPageProps {
 }
 
 const STATUS_VALUES = [
+  // Stage 14b pipeline
+  "FLOATED",
+  "COST_WORKING",
+  "QUOTATION_PREPARED",
+  "APPROVED",
+  "CONVERTED",
+  // legacy (pre-14b)
   "DRAFT",
   "PENDING_APPROVAL",
   "NEEDS_CORRECTION",
-  "APPROVED",
   "SENT",
   "CUSTOMER_APPROVED",
-  "CONVERTED",
 ] as const;
 
 export default async function QuotationsPage({ searchParams }: QuotationsPageProps) {
@@ -36,7 +41,7 @@ export default async function QuotationsPage({ searchParams }: QuotationsPagePro
   }
 
   const params = await searchParams;
-  const status = STATUS_VALUES.find((s) => s === params.status) ?? "PENDING_APPROVAL";
+  const status = STATUS_VALUES.find((s) => s === params.status) ?? "FLOATED";
   const branchId = params.branchId;
   const q = params.q?.trim();
 

@@ -4,16 +4,17 @@ import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { lineItemsReplaceSchema } from "@/lib/validation/quotation";
 
-const IN_PLACE_EDITABLE_STATUSES = ["DRAFT", "NEEDS_CORRECTION"] as const;
-const CLONE_ON_EDIT_STATUSES = ["APPROVED", "SENT", "CUSTOMER_APPROVED"] as const;
+// Stage 14b pipeline first, then the legacy pre-14b statuses for old rows.
+const IN_PLACE_EDITABLE_STATUSES = ["FLOATED", "COST_WORKING", "QUOTATION_PREPARED", "DRAFT", "NEEDS_CORRECTION"] as const;
+const CLONE_ON_EDIT_STATUSES = ["APPROVED"] as const;
 
-// Replace-all for the current version's line items. While the current
-// version hasn't been approved yet (DRAFT/NEEDS_CORRECTION), this mutates it
-// in place — same "replace children wholesale" convention as Customer
-// Master v2's branches/bill-types. Once a version has been approved, an edit
-// instead clones the line items into versionNumber + 1 and resets the
-// Quotation back to DRAFT for re-approval, so the approved version's history
-// (and its approvedBy/approvedAt) is never overwritten. See stage-3.md.
+// Replace-all for the current version's line items. Before approval this
+// mutates the current version in place — same "replace children wholesale"
+// convention as Customer Master v2's branches/bill-types. Once a version has
+// been APPROVED, an edit instead clones the line items into versionNumber + 1
+// and resets the Quotation to QUOTATION_PREPARED for re-approval, so the
+// approved version's history (and its approvedBy/approvedAt) is never
+// overwritten. See stage-3.md / stage-14b.md.
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -84,7 +85,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           where: { id },
           data: {
             currentVersionNumber: nextVersionNumber,
-            status: "DRAFT",
+            status: "QUOTATION_PREPARED",
             reviewedById: null,
             reviewedAt: null,
             reviewNote: null,

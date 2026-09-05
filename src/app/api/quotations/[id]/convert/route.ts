@@ -4,12 +4,13 @@ import { prisma } from "@/lib/db/prisma";
 import { can } from "@/lib/permissions/capabilities";
 import { formatQuotationRef } from "@/lib/validation/quotation";
 
-// CUSTOMER_APPROVED -> CONVERTED. Because a Quotation can bundle several
-// Enquiries (see stage-3.md), this produces one JSON snapshot per attached
-// Enquiry — not a single blob on the Quotation record — so Stage 4 can build
-// one Job per Enquiry with zero re-entry. Every enquiry in the bundle shares
-// the quotation's full line-item set (no per-shipment cost attribution is
-// defined by the source process document); flagged for Stage 4 to confirm.
+// APPROVED -> CONVERTED (Stage 14b: was CUSTOMER_APPROVED — the new pipeline
+// has no separate customer sign-off step). Because a Quotation can bundle
+// several Enquiries (see stage-3.md), this produces one JSON snapshot per
+// attached Enquiry — not a single blob on the Quotation record — so Stage 4
+// can build one Job per Enquiry with zero re-entry. Every enquiry in the
+// bundle shares the quotation's full line-item set (no per-shipment cost
+// attribution is defined by the source process document).
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,9 +35,9 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   });
   if (!quotation) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (quotation.status !== "CUSTOMER_APPROVED") {
+  if (quotation.status !== "APPROVED") {
     return NextResponse.json(
-      { error: `A quotation must be Customer Approved before it can be converted to Jobs (current status: ${quotation.status})` },
+      { error: `A quotation must be Approved before it can be converted to Jobs (current status: ${quotation.status})` },
       { status: 409 },
     );
   }

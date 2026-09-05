@@ -6,9 +6,9 @@ import { customerApprovalSchema, formatQuotationRef } from "@/lib/validation/quo
 import { fireAfterResponse } from "@/lib/notifications/fire";
 import { quotationCustomerApproved } from "@/lib/notifications/events";
 
-// Customer approval recorded manually by Sales (Section 5.3 step 4) — not a
-// customer-portal action, since Customer row-scoping doesn't exist until
-// Stage 9. SENT -> CUSTOMER_APPROVED.
+// DEAD as of Stage 14b — the new pipeline has no recorded customer sign-off
+// (APPROVED goes straight to Convert). Left in place, still callable, for
+// legacy pre-14b quotations. SENT -> CUSTOMER_APPROVED.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

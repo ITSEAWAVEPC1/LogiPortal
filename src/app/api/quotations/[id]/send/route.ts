@@ -6,6 +6,12 @@ import { formatQuotationRef } from "@/lib/validation/quotation";
 import { fireAfterResponse } from "@/lib/notifications/fire";
 import { quotationSent } from "@/lib/notifications/events";
 
+// DEAD as of Stage 14b — the new pipeline ends at APPROVED (customer is
+// notified there) and goes straight to Convert; there is no SENT step. Left
+// in place, still callable, for legacy pre-14b quotations. NOTE: the new
+// APPROVED is a different lifecycle point than the old one — calling this on
+// a 14b quotation would move it to SENT, which no UI surfaces.
+//
 // The literal Section 5.3 approval gate: a quotation cannot be marked Sent
 // without Branch Manager approval — enforced here, not just in the UI.
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
