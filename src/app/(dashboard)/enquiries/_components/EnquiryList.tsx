@@ -32,11 +32,13 @@ interface EnquiryListProps {
   canEdit: boolean;
 }
 
+// OPEN and NEEDS_CORRECTION dropped as tabs in Stage 14a — both have been dead
+// since Stage 12b removed the Branch Manager approval gate (nothing transitions
+// an enquiry into either state anymore). The enum values + badge variants are
+// kept so any legacy row still renders via a bookmarked ?status= link.
 const STATUS_TABS = [
   { value: "DRAFT", label: "Draft" },
-  { value: "OPEN", label: "Open" },
   { value: "READY_FOR_QUOTATION", label: "Ready for Quotation" },
-  { value: "NEEDS_CORRECTION", label: "Needs Correction" },
 ];
 
 const STATUS_BADGE_VARIANT = {

@@ -23,9 +23,10 @@ interface FreightPackageRaw {
   length: number | null;
   width: number | null;
   height: number | null;
-  dimensionUnit: "MM" | "CM" | null;
+  dimensionUnit: "MM" | "CM" | "IN" | "FT" | "M" | null;
   weight: number | null;
   containerType: string | null;
+  numberOfContainers: number | null;
 }
 
 interface FreightDetailRaw {
@@ -34,10 +35,6 @@ interface FreightDetailRaw {
   portOfDischargeId: string | null;
   finalDestinationAddress: string | null;
   cargoMode: "LCL_AIR" | "FCL" | null;
-  isOdc: boolean;
-  odcDimensions: string | null;
-  odcPackageCount: number | null;
-  odcPerPackageWeight: number | null;
   packages: FreightPackageRaw[];
 }
 
@@ -58,15 +55,11 @@ interface TransportDetailRaw {
   length: number | null;
   width: number | null;
   height: number | null;
-  dimensionUnit: "MM" | "CM" | null;
+  dimensionUnit: "MM" | "CM" | "IN" | "FT" | "M" | null;
   weight: number | null;
   fclWeight: number | null;
   containerType: string | null;
   deliveryType: "LOADED" | "DESTUFF" | null;
-  isOdc: boolean;
-  odcDimensions: string | null;
-  odcPackageCount: number | null;
-  odcPerPackageWeight: number | null;
 }
 
 export interface EnquiryDetail {
@@ -108,11 +101,8 @@ function toFreightState(raw: FreightDetailRaw | null): FreightDetailState {
       dimensionUnit: p.dimensionUnit ?? "",
       weight: p.weight,
       containerType: p.containerType ?? "",
+      numberOfContainers: p.numberOfContainers,
     })),
-    isOdc: raw.isOdc,
-    odcDimensions: raw.odcDimensions ?? "",
-    odcPackageCount: raw.odcPackageCount,
-    odcPerPackageWeight: raw.odcPerPackageWeight,
   };
 }
 
@@ -136,10 +126,6 @@ function toTransportState(raw: TransportDetailRaw | null): TransportDetailState 
     fclWeight: raw.fclWeight,
     containerType: raw.containerType ?? "",
     deliveryType: raw.deliveryType ?? "",
-    isOdc: raw.isOdc,
-    odcDimensions: raw.odcDimensions ?? "",
-    odcPackageCount: raw.odcPackageCount,
-    odcPerPackageWeight: raw.odcPerPackageWeight,
   };
 }
 
@@ -198,11 +184,8 @@ function toAutosavePayload(form: FormState) {
         dimensionUnit: p.dimensionUnit || null,
         weight: p.weight,
         containerType: p.containerType || null,
+        numberOfContainers: p.numberOfContainers,
       })),
-      isOdc: form.freightDetail.isOdc,
-      odcDimensions: form.freightDetail.odcDimensions || null,
-      odcPackageCount: form.freightDetail.odcPackageCount,
-      odcPerPackageWeight: form.freightDetail.odcPerPackageWeight,
     },
     customsDetail: {
       commodityLines: form.customsDetail.commodityLines.map((l) => ({

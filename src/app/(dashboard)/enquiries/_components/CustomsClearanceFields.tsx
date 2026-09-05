@@ -42,6 +42,8 @@ export function CustomsClearanceFields({ value, onChange, disabled, fieldConfig 
     onChange({ commodityLines: value.commodityLines.filter((_, i) => i !== index) });
   }
 
+  const showRemove = !disabled && value.commodityLines.length > 1;
+
   return (
     <div className="rounded-lg border border-border-subtle p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -52,24 +54,38 @@ export function CustomsClearanceFields({ value, onChange, disabled, fieldConfig 
           </Button>
         )}
       </div>
+
+      {/* Column headings — shown once (Stage 14a), not repeated per row. */}
+      <div className="mb-1 hidden gap-2 lg:flex">
+        <span className="flex-1 text-xs font-medium text-text-tertiary">HS Code</span>
+        <span className="flex-1 text-xs font-medium text-text-tertiary">Commodity</span>
+        {showRemove && <span className="w-[68px] shrink-0" />}
+      </div>
+
       <div className="flex flex-col gap-2">
         {value.commodityLines.map((line, index) => (
           <div key={index} className="flex items-end gap-2 rounded-md border border-border-subtle p-2">
-            <Input
-              label="HS Code"
-              value={line.hsCode}
-              onChange={(e) => updateLine(index, { hsCode: e.target.value })}
-              disabled={disabled}
-              className="flex-1"
-            />
-            <Input
-              label="Commodity"
-              value={line.commodity}
-              onChange={(e) => updateLine(index, { commodity: e.target.value })}
-              disabled={disabled}
-              className="flex-1"
-            />
-            {!disabled && value.commodityLines.length > 1 && (
+            <div className="flex flex-1 flex-col gap-1">
+              <span className="text-xs font-medium text-text-tertiary lg:hidden">HS Code</span>
+              <Input
+                aria-label="HS Code"
+                value={line.hsCode}
+                onChange={(e) => updateLine(index, { hsCode: e.target.value })}
+                disabled={disabled}
+                className="w-full"
+              />
+            </div>
+            <div className="flex flex-1 flex-col gap-1">
+              <span className="text-xs font-medium text-text-tertiary lg:hidden">Commodity</span>
+              <Input
+                aria-label="Commodity"
+                value={line.commodity}
+                onChange={(e) => updateLine(index, { commodity: e.target.value })}
+                disabled={disabled}
+                className="w-full"
+              />
+            </div>
+            {showRemove && (
               <Button size="sm" variant="ghost" onClick={() => removeLine(index)}>
                 Remove
               </Button>

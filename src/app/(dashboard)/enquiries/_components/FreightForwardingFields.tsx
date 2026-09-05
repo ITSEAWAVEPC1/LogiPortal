@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Checkbox, Input, Select } from "@/components/ui";
+import { Button, Input, Select } from "@/components/ui";
 import { CARGO_MODE_OPTIONS, DIMENSION_UNIT_OPTIONS, FINAL_DESTINATION_ADDRESS_INCOTERMS } from "@/lib/validation/enquiry";
 import type { FieldConfigEntry } from "@/lib/enquiries/field-config-keys";
 
@@ -8,9 +8,10 @@ export interface FreightPackageState {
   length: number | null;
   width: number | null;
   height: number | null;
-  dimensionUnit: "" | "MM" | "CM";
+  dimensionUnit: "" | "MM" | "CM" | "IN" | "FT" | "M";
   weight: number | null;
   containerType: string;
+  numberOfContainers: number | null;
 }
 
 export interface FreightDetailState {
@@ -20,10 +21,6 @@ export interface FreightDetailState {
   finalDestinationAddress: string;
   cargoMode: "" | "LCL_AIR" | "FCL";
   packages: FreightPackageState[];
-  isOdc: boolean;
-  odcDimensions: string;
-  odcPackageCount: number | null;
-  odcPerPackageWeight: number | null;
 }
 
 const EMPTY_PACKAGE: FreightPackageState = {
@@ -33,6 +30,7 @@ const EMPTY_PACKAGE: FreightPackageState = {
   dimensionUnit: "",
   weight: null,
   containerType: "",
+  numberOfContainers: null,
 };
 
 export const EMPTY_FREIGHT_DETAIL: FreightDetailState = {
@@ -42,10 +40,6 @@ export const EMPTY_FREIGHT_DETAIL: FreightDetailState = {
   finalDestinationAddress: "",
   cargoMode: "",
   packages: [],
-  isOdc: false,
-  odcDimensions: "",
-  odcPackageCount: null,
-  odcPerPackageWeight: null,
 };
 
 const INCOTERM_OPTIONS = ["EXW", "FOB", "CIF", "DDP", "DDU", "FCA", "CPT", "CIP", "DAP", "DPU"].map((v) => ({
@@ -56,6 +50,24 @@ const INCOTERM_OPTIONS = ["EXW", "FOB", "CIF", "DDP", "DDU", "FCA", "CPT", "CIP"
 function numOrNull(raw: string): number | null {
   return raw === "" ? null : Number(raw);
 }
+
+// Per-row column set — FCL is container-centric (Stage 14a: type + how many +
+// weight per container, no L/W/H); LCL & Air keeps dimensions.
+type PackageColumn = { key: keyof FreightPackageState; label: string; width: string };
+
+const FCL_COLUMNS: PackageColumn[] = [
+  { key: "containerType", label: "Container Type", width: "w-40" },
+  { key: "numberOfContainers", label: "No. of Containers", width: "w-32" },
+  { key: "weight", label: "Weight per Container", width: "w-40" },
+];
+
+const LCL_COLUMNS: PackageColumn[] = [
+  { key: "length", label: "Length", width: "w-24" },
+  { key: "width", label: "Width", width: "w-24" },
+  { key: "height", label: "Height", width: "w-24" },
+  { key: "dimensionUnit", label: "Unit", width: "w-24" },
+  { key: "weight", label: "Weight", width: "w-28" },
+];
 
 export interface PortOption {
   id: string;
@@ -100,11 +112,53 @@ export function FreightForwardingFields({ value, onChange, disabled, ports, fiel
 
   const portOptions = ports.map((p) => ({ value: p.id, label: p.code ? `${p.name} (${p.code})` : p.name }));
 
+  const isFcl = value.cargoMode === "FCL";
+  const columns = isFcl ? FCL_COLUMNS : LCL_COLUMNS;
+
   const showDestinationAddress = FINAL_DESTINATION_ADDRESS_INCOTERMS.includes(
     value.incoterm as (typeof FINAL_DESTINATION_ADDRESS_INCOTERMS)[number],
   );
 
   const totalWeight = value.packages.reduce((sum, p) => sum + (p.weight || 0), 0);
+
+  function renderCell(pkg: FreightPackageState, index: number, col: PackageColumn) {
+    if (col.key === "dimensionUnit") {
+      return (
+        <Select
+          aria-label={col.label}
+          placeholder="Unit"
+          value={pkg.dimensionUnit}
+          onChange={(e) => updatePackage(index, { dimensionUnit: e.target.value as FreightPackageState["dimensionUnit"] })}
+          options={[...DIMENSION_UNIT_OPTIONS]}
+          disabled={disabled}
+          className="w-full"
+        />
+      );
+    }
+    if (col.key === "containerType") {
+      return (
+        <Input
+          aria-label={col.label}
+          value={pkg.containerType}
+          onChange={(e) => updatePackage(index, { containerType: e.target.value })}
+          disabled={disabled}
+          className="w-full"
+        />
+      );
+    }
+    // numeric columns: length / width / height / weight / numberOfContainers
+    const raw = pkg[col.key];
+    return (
+      <Input
+        aria-label={col.label}
+        type="number"
+        value={raw === null ? "" : String(raw)}
+        onChange={(e) => updatePackage(index, { [col.key]: numOrNull(e.target.value) } as Partial<FreightPackageState>)}
+        disabled={disabled}
+        className="w-full"
+      />
+    );
+  }
 
   return (
     <div className="rounded-lg border border-border-subtle p-4">
@@ -145,7 +199,7 @@ export function FreightForwardingFields({ value, onChange, disabled, ports, fiel
       {showDestinationAddress && (
         <div className="mt-3">
           <Input
-            label="Final Destination Address"
+            label={value.incoterm === "EXW" ? "Pickup Address" : "Final Destination Address"}
             value={value.finalDestinationAddress}
             onChange={(e) => set("finalDestinationAddress", e.target.value)}
             disabled={disabled}
@@ -169,68 +223,34 @@ export function FreightForwardingFields({ value, onChange, disabled, ports, fiel
       {visible("packages") && value.cargoMode && (
         <div className="mt-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-text-primary">
-              {value.cargoMode === "FCL" ? "Containers" : "Packages"}
-            </span>
+            <span className="text-sm font-medium text-text-primary">{isFcl ? "Containers" : "Packages"}</span>
             {!disabled && (
               <Button size="sm" variant="ghost" onClick={addPackage}>
-                {value.cargoMode === "FCL" ? "+ Add container" : "+ Add package"}
+                {isFcl ? "+ Add container" : "+ Add package"}
               </Button>
             )}
           </div>
+
+          {/* Column headings — shown once (Stage 14a), not repeated per row. */}
+          {value.packages.length > 0 && (
+            <div className="mb-1 hidden flex-wrap gap-2 lg:flex">
+              {columns.map((c) => (
+                <span key={c.key} className={`${c.width} text-xs font-medium text-text-tertiary`}>
+                  {c.label}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             {value.packages.map((pkg, index) => (
               <div key={index} className="flex flex-wrap items-end gap-2 rounded-md border border-border-subtle p-2">
-                {value.cargoMode === "FCL" && (
-                  <Input
-                    label="Container Type"
-                    value={pkg.containerType}
-                    onChange={(e) => updatePackage(index, { containerType: e.target.value })}
-                    disabled={disabled}
-                    className="w-32"
-                  />
-                )}
-                <Input
-                  label="Length"
-                  type="number"
-                  value={pkg.length ?? ""}
-                  onChange={(e) => updatePackage(index, { length: numOrNull(e.target.value) })}
-                  disabled={disabled}
-                  className="w-20"
-                />
-                <Input
-                  label="Width"
-                  type="number"
-                  value={pkg.width ?? ""}
-                  onChange={(e) => updatePackage(index, { width: numOrNull(e.target.value) })}
-                  disabled={disabled}
-                  className="w-20"
-                />
-                <Input
-                  label="Height"
-                  type="number"
-                  value={pkg.height ?? ""}
-                  onChange={(e) => updatePackage(index, { height: numOrNull(e.target.value) })}
-                  disabled={disabled}
-                  className="w-20"
-                />
-                <Select
-                  label="Unit"
-                  placeholder="Select..."
-                  value={pkg.dimensionUnit}
-                  onChange={(e) => updatePackage(index, { dimensionUnit: e.target.value as FreightPackageState["dimensionUnit"] })}
-                  options={[...DIMENSION_UNIT_OPTIONS]}
-                  disabled={disabled}
-                  className="w-24"
-                />
-                <Input
-                  label={value.cargoMode === "FCL" ? "Weight per container" : "Weight"}
-                  type="number"
-                  value={pkg.weight ?? ""}
-                  onChange={(e) => updatePackage(index, { weight: numOrNull(e.target.value) })}
-                  disabled={disabled}
-                  className="w-32"
-                />
+                {columns.map((col) => (
+                  <div key={col.key} className={`flex flex-col gap-1 ${col.width}`}>
+                    <span className="text-xs font-medium text-text-tertiary lg:hidden">{col.label}</span>
+                    {renderCell(pkg, index, col)}
+                  </div>
+                ))}
                 {!disabled && (
                   <Button size="sm" variant="ghost" onClick={() => removePackage(index)}>
                     Remove
@@ -240,47 +260,8 @@ export function FreightForwardingFields({ value, onChange, disabled, ports, fiel
             ))}
             {value.packages.length === 0 && <p className="text-xs text-text-tertiary">No packages added.</p>}
           </div>
-          {value.packages.length > 0 && (
-            <p className="mt-2 text-xs text-text-tertiary">Total weight: {totalWeight}</p>
-          )}
+          {value.packages.length > 0 && <p className="mt-2 text-xs text-text-tertiary">Total weight: {totalWeight}</p>}
         </div>
-      )}
-
-      {value.cargoMode === "FCL" && (
-        <>
-          <div className="mt-3">
-            <Checkbox
-              label="Over-Dimensional Cargo (ODC)?"
-              checked={value.isOdc}
-              onChange={(e) => set("isOdc", e.target.checked)}
-              disabled={disabled}
-            />
-          </div>
-          {value.isOdc && (
-            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-              <Input
-                label="ODC Dimensions"
-                value={value.odcDimensions}
-                onChange={(e) => set("odcDimensions", e.target.value)}
-                disabled={disabled}
-              />
-              <Input
-                label="ODC No. of Packages"
-                type="number"
-                value={value.odcPackageCount ?? ""}
-                onChange={(e) => set("odcPackageCount", numOrNull(e.target.value))}
-                disabled={disabled}
-              />
-              <Input
-                label="ODC Per Package Weight"
-                type="number"
-                value={value.odcPerPackageWeight ?? ""}
-                onChange={(e) => set("odcPerPackageWeight", numOrNull(e.target.value))}
-                disabled={disabled}
-              />
-            </div>
-          )}
-        </>
       )}
     </div>
   );

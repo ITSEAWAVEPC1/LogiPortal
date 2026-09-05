@@ -1,6 +1,6 @@
 "use client";
 
-import { Checkbox, Input, Select } from "@/components/ui";
+import { Input, Select } from "@/components/ui";
 import { CARGO_MODE_OPTIONS, DELIVERY_TYPE_OPTIONS, DIMENSION_UNIT_OPTIONS } from "@/lib/validation/enquiry";
 import type { FieldConfigEntry } from "@/lib/enquiries/field-config-keys";
 
@@ -12,15 +12,11 @@ export interface TransportDetailState {
   length: number | null;
   width: number | null;
   height: number | null;
-  dimensionUnit: "" | "MM" | "CM";
+  dimensionUnit: "" | "MM" | "CM" | "IN" | "FT" | "M";
   weight: number | null;
   fclWeight: number | null;
   containerType: string;
   deliveryType: "" | "LOADED" | "DESTUFF";
-  isOdc: boolean;
-  odcDimensions: string;
-  odcPackageCount: number | null;
-  odcPerPackageWeight: number | null;
 }
 
 export const EMPTY_TRANSPORT_DETAIL: TransportDetailState = {
@@ -36,10 +32,6 @@ export const EMPTY_TRANSPORT_DETAIL: TransportDetailState = {
   fclWeight: null,
   containerType: "",
   deliveryType: "",
-  isOdc: false,
-  odcDimensions: "",
-  odcPackageCount: null,
-  odcPerPackageWeight: null,
 };
 
 function numOrNull(raw: string): number | null {
@@ -151,67 +143,33 @@ export function TransportationFields({ value, onChange, disabled, fieldConfig }:
       )}
 
       {value.cargoMode === "FCL" && (
-        <>
-          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <Input
+            label="Weight"
+            type="number"
+            value={value.fclWeight ?? ""}
+            onChange={(e) => set("fclWeight", numOrNull(e.target.value))}
+            disabled={disabled}
+          />
+          {visible("containerType") && (
             <Input
-              label="Weight"
-              type="number"
-              value={value.fclWeight ?? ""}
-              onChange={(e) => set("fclWeight", numOrNull(e.target.value))}
+              label="Container Type"
+              value={value.containerType}
+              onChange={(e) => set("containerType", e.target.value)}
               disabled={disabled}
             />
-            {visible("containerType") && (
-              <Input
-                label="Container Type"
-                value={value.containerType}
-                onChange={(e) => set("containerType", e.target.value)}
-                disabled={disabled}
-              />
-            )}
-            {visible("deliveryType") && (
-              <Select
-                label="Delivery Type"
-                placeholder="Select..."
-                value={value.deliveryType}
-                onChange={(e) => set("deliveryType", e.target.value as TransportDetailState["deliveryType"])}
-                options={[...DELIVERY_TYPE_OPTIONS]}
-                disabled={disabled}
-              />
-            )}
-          </div>
-          <div className="mt-3">
-            <Checkbox
-              label="Over-Dimensional Cargo (ODC)?"
-              checked={value.isOdc}
-              onChange={(e) => set("isOdc", e.target.checked)}
-              disabled={disabled}
-            />
-          </div>
-          {value.isOdc && (
-            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-              <Input
-                label="ODC Dimensions"
-                value={value.odcDimensions}
-                onChange={(e) => set("odcDimensions", e.target.value)}
-                disabled={disabled}
-              />
-              <Input
-                label="ODC No. of Packages"
-                type="number"
-                value={value.odcPackageCount ?? ""}
-                onChange={(e) => set("odcPackageCount", numOrNull(e.target.value))}
-                disabled={disabled}
-              />
-              <Input
-                label="ODC Per Package Weight"
-                type="number"
-                value={value.odcPerPackageWeight ?? ""}
-                onChange={(e) => set("odcPerPackageWeight", numOrNull(e.target.value))}
-                disabled={disabled}
-              />
-            </div>
           )}
-        </>
+          {visible("deliveryType") && (
+            <Select
+              label="Delivery Type"
+              placeholder="Select..."
+              value={value.deliveryType}
+              onChange={(e) => set("deliveryType", e.target.value as TransportDetailState["deliveryType"])}
+              options={[...DELIVERY_TYPE_OPTIONS]}
+              disabled={disabled}
+            />
+          )}
+        </div>
       )}
     </div>
   );

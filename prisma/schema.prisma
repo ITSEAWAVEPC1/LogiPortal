@@ -335,10 +335,13 @@ enum TransportDeliveryType {
 }
 
 // Stakeholder field-rework addition (post-Stage-2) — L x W x H dimension
-// entry replacing the free-text "dimensions" string.
+// entry replacing the free-text "dimensions" string. IN/FT/M added in Stage 14a.
 enum DimensionUnit {
   MM
   CM
+  IN
+  FT
+  M
 }
 
 model Enquiry {
@@ -468,6 +471,9 @@ model EnquiryFreightPackage {
   weight        Float?
   // FCL only — e.g. "40HC"/"20GP". Not shown/used for LCL & Air rows.
   containerType String?
+  // FCL only (Stage 14a) — one row per container *type*, this many of them.
+  // LCL & Air rows leave it null and use L/W/H instead.
+  numberOfContainers Int?
   sortOrder     Int            @default(0)
 
   createdAt DateTime @default(now())

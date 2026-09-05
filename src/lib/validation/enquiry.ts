@@ -26,6 +26,9 @@ export const DELIVERY_TYPE_OPTIONS = [
 export const DIMENSION_UNIT_OPTIONS = [
   { value: "MM", label: "mm" },
   { value: "CM", label: "cm" },
+  { value: "IN", label: "in" },
+  { value: "FT", label: "ft" },
+  { value: "M", label: "m" },
 ] as const;
 
 // Incoterms whose Freight Forwarding detail shows the Final Destination
@@ -47,16 +50,17 @@ export function formatEnquiryRef(row: {
 const num = z.number().nullable().optional();
 const str = z.string().trim().nullable().optional();
 
-// One row per package (LCL & Air) or per container (FCL, so weight and
-// container type are entered per container). All fields optional — dims and
-// weight are never mandatory.
+// One row per package (LCL & Air) or per container *type* (FCL — Stage 14a:
+// container type + how many + weight per container; no L/W/H). All fields
+// optional — dims and weight are never mandatory.
 const packageLenient = z.object({
   length: num,
   width: num,
   height: num,
-  dimensionUnit: z.enum(["MM", "CM"]).nullable().optional(),
+  dimensionUnit: z.enum(["MM", "CM", "IN", "FT", "M"]).nullable().optional(),
   weight: num,
   containerType: str,
+  numberOfContainers: num,
 });
 
 const commodityLineLenient = z.object({
@@ -71,14 +75,11 @@ const freightDetailLenient = z.object({
   portOfLoadingId: str,
   portOfDischargeId: str,
   // Only relevant when incoterm is one of FINAL_DESTINATION_ADDRESS_INCOTERMS;
-  // never mandatory either way.
+  // never mandatory either way. Labelled "Pickup Address" for EXW, "Final
+  // Destination Address" otherwise (Stage 14a — relabel only, same column).
   finalDestinationAddress: str,
   cargoMode: z.enum(["LCL_AIR", "FCL"]).nullable().optional(),
   packages: z.array(packageLenient).optional(),
-  isOdc: z.boolean().optional(),
-  odcDimensions: str,
-  odcPackageCount: num,
-  odcPerPackageWeight: num,
 });
 
 const customsDetailLenient = z.object({
@@ -93,15 +94,11 @@ const transportDetailLenient = z.object({
   length: num,
   width: num,
   height: num,
-  dimensionUnit: z.enum(["MM", "CM"]).nullable().optional(),
+  dimensionUnit: z.enum(["MM", "CM", "IN", "FT", "M"]).nullable().optional(),
   weight: num,
   fclWeight: num,
   containerType: str,
   deliveryType: z.enum(["LOADED", "DESTUFF"]).nullable().optional(),
-  isOdc: z.boolean().optional(),
-  odcDimensions: str,
-  odcPackageCount: num,
-  odcPerPackageWeight: num,
 });
 
 export const enquiryAutosaveSchema = z.object({
@@ -122,14 +119,15 @@ export const enquiryAutosaveSchema = z.object({
 
 export type EnquiryAutosaveInput = z.infer<typeof enquiryAutosaveSchema>;
 
-// Strict — run only on explicit "Submit Enquiry". Structural only: a service
-// type's detail object must exist, and its ODC sub-fields are required when
-// isOdc is checked (self-gated behind that checkbox, not admin-configurable).
-// Everything else — Incoterm, ports, cargo mode, "at least one
-// package/commodity line", Transportation's pickup/destination/etc — moved to
+// Strict — run only on explicit "Submit Enquiry". Structural only: a selected
+// service type's detail object must exist, and each Customs commodity line that
+// exists must have both hsCode and commodity filled. Everything else —
+// Incoterm, ports, cargo mode, "at least one package/commodity line",
+// Transportation's pickup/destination/etc — moved to
 // src/lib/enquiries/field-config.ts's checkConfigurableFieldRequirements,
 // which the submit route runs after this schema passes, so admin-set
 // per-service-type requiredness (Stage 12c) is enforced server-side too.
+// (ODC was removed in Stage 14a — no ODC checks remain here.)
 export const enquirySubmitSchema = enquiryAutosaveSchema
   .extend({
     shipmentType: z.enum(["IMPORT", "EXPORT"]),
@@ -142,24 +140,8 @@ export const enquirySubmitSchema = enquiryAutosaveSchema
     const serviceTypes = data.serviceTypes;
 
     if (serviceTypes.includes("FREIGHT_FORWARDING")) {
-      const d = data.freightDetail;
-      if (!d) {
+      if (!data.freightDetail) {
         ctx.addIssue({ code: "custom", path: ["freightDetail"], message: "Freight Forwarding details are required" });
-      } else if (d.isOdc) {
-        if (!d.odcDimensions)
-          ctx.addIssue({ code: "custom", path: ["freightDetail", "odcDimensions"], message: "ODC Dimensions are required" });
-        if (d.odcPackageCount == null)
-          ctx.addIssue({
-            code: "custom",
-            path: ["freightDetail", "odcPackageCount"],
-            message: "ODC No. of Packages is required",
-          });
-        if (d.odcPerPackageWeight == null)
-          ctx.addIssue({
-            code: "custom",
-            path: ["freightDetail", "odcPerPackageWeight"],
-            message: "ODC Per Package Weight is required",
-          });
       }
     }
 
@@ -186,24 +168,8 @@ export const enquirySubmitSchema = enquiryAutosaveSchema
     }
 
     if (serviceTypes.includes("TRANSPORTATION")) {
-      const d = data.transportDetail;
-      if (!d) {
+      if (!data.transportDetail) {
         ctx.addIssue({ code: "custom", path: ["transportDetail"], message: "Transportation details are required" });
-      } else if (d.isOdc) {
-        if (!d.odcDimensions)
-          ctx.addIssue({ code: "custom", path: ["transportDetail", "odcDimensions"], message: "ODC Dimensions are required" });
-        if (d.odcPackageCount == null)
-          ctx.addIssue({
-            code: "custom",
-            path: ["transportDetail", "odcPackageCount"],
-            message: "ODC No. of Packages is required",
-          });
-        if (d.odcPerPackageWeight == null)
-          ctx.addIssue({
-            code: "custom",
-            path: ["transportDetail", "odcPerPackageWeight"],
-            message: "ODC Per Package Weight is required",
-          });
       }
     }
   });
