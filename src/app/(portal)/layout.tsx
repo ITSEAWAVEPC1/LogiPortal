@@ -1,9 +1,10 @@
-import Image from "next/image";
 import { Card } from "@/components/ui";
-import { PortalNav } from "@/components/portal/PortalNav";
+import { AppShell } from "@/components/layout/AppShell";
+import { PortalMobileHeader } from "@/components/portal/PortalMobileHeader";
 import { PortalSignOut } from "@/components/portal/PortalSignOut";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { getPortalContext } from "@/lib/portal/guard";
+import { PORTAL_NAV_ITEMS } from "@/lib/portal/nav-items";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   // Redirects an unauthenticated visitor to /login, a non-CUSTOMER to
@@ -11,12 +12,9 @@ export default async function PortalLayout({ children }: { children: React.React
   const ctx = await getPortalContext();
 
   return (
-    <div className="flex h-screen">
-      <aside className="flex h-full w-60 flex-col border-r border-border-subtle bg-surface">
-        <div className="px-4 py-5">
-          <Image src="/brand/sw_black.png" alt="Seawave" width={480} height={270} priority className="h-auto w-36" />
-        </div>
-        <PortalNav />
+    <AppShell
+      navItems={PORTAL_NAV_ITEMS}
+      sidebarFooter={
         <div className="border-t border-border-subtle px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="min-w-0">
@@ -27,11 +25,13 @@ export default async function PortalLayout({ children }: { children: React.React
           </div>
           <PortalSignOut />
         </div>
-      </aside>
-      <main className="flex-1 overflow-y-auto bg-background p-6">
+      }
+    >
+      <PortalMobileHeader />
+      <main className="flex-1 overflow-y-auto bg-background p-4 lg:p-6">
         {ctx.orgId ? children : <PortalNotLinked />}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

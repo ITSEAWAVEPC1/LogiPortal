@@ -100,10 +100,21 @@ function AppShellNav({ items, onNavigate }: { items: AppShellNavItem[]; onNaviga
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // Longest-prefix match across top-level hrefs, so a nav root that is also
+  // an ancestor path of a sibling (e.g. the portal's "/portal" Dashboard vs
+  // "/portal/jobs") isn't marked active at the same time as the more
+  // specific sibling. A no-op for the dashboard shell today (no NAV_ITEMS
+  // href is a prefix of another there) but keeps this shared component
+  // correct for any nav tree.
+  const activeHref = items
+    .map((item) => item.href)
+    .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
+    .sort((a, b) => b.length - a.length)[0];
+
   return (
     <nav className="flex-1 space-y-1 overflow-y-auto px-2">
       {items.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const active = item.href === activeHref;
         const linkClass = cn(
           "block rounded-md px-3 py-2 text-sm font-medium",
           active

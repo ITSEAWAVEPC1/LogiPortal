@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Badge, Card } from "@/components/ui";
+import { Badge, Card, DataTable } from "@/components/ui";
 import { getPortalContext } from "@/lib/portal/guard";
-import { getPortalJobs } from "@/lib/portal/queries";
+import { getPortalJobs, type PortalJobListRow } from "@/lib/portal/queries";
 import { PortalPagination } from "@/components/portal/PortalPagination";
 import { jobStatusVariant, shortDate, statusLabel } from "@/components/portal/portal-format";
 
@@ -62,42 +62,31 @@ export default async function PortalJobsPage({ searchParams }: PageProps) {
       </div>
 
       <Card>
-        {result.jobs.length === 0 ? (
-          <p className="text-sm text-text-secondary">No shipments match.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border-subtle text-left text-text-tertiary">
-                  <th className="py-2 pr-4 font-medium">Reference</th>
-                  <th className="py-2 pr-4 font-medium">Type</th>
-                  <th className="py-2 pr-4 font-medium">Route</th>
-                  <th className="py-2 pr-4 font-medium">Vessel</th>
-                  <th className="py-2 pr-4 font-medium">Updated</th>
-                  <th className="py-2 pr-4 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.jobs.map((j) => (
-                  <tr key={j.id} className="border-b border-border-subtle last:border-0">
-                    <td className="py-2 pr-4">
-                      <Link href={`/portal/jobs/${j.id}`} className="font-medium text-brand-teal underline">
-                        {j.ref}
-                      </Link>
-                    </td>
-                    <td className="py-2 pr-4">{j.shipmentType}</td>
-                    <td className="py-2 pr-4">{j.route}</td>
-                    <td className="py-2 pr-4">{j.vessel}</td>
-                    <td className="py-2 pr-4 text-text-tertiary">{shortDate(j.updatedAt)}</td>
-                    <td className="py-2 pr-4">
-                      <Badge variant={jobStatusVariant(j.status)}>{statusLabel(j.status)}</Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable<PortalJobListRow>
+          columns={[
+            {
+              key: "ref",
+              header: "Reference",
+              render: (j) => (
+                <Link href={`/portal/jobs/${j.id}`} className="font-medium text-brand-teal underline">
+                  {j.ref}
+                </Link>
+              ),
+            },
+            { key: "shipmentType", header: "Type" },
+            { key: "route", header: "Route" },
+            { key: "vessel", header: "Vessel" },
+            { key: "updatedAt", header: "Updated", render: (j) => shortDate(j.updatedAt) },
+            {
+              key: "status",
+              header: "Status",
+              render: (j) => <Badge variant={jobStatusVariant(j.status)}>{statusLabel(j.status)}</Badge>,
+            },
+          ]}
+          data={result.jobs}
+          getRowKey={(j) => j.id}
+          emptyMessage="No shipments match."
+        />
         <PortalPagination
           basePath="/portal/jobs"
           query={{ status: result.status, q: result.q }}
