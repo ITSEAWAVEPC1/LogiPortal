@@ -69,7 +69,7 @@ export function TransportationFields({ value, onChange, disabled, fieldConfig }:
   return (
     <div className="rounded-lg border border-border-subtle p-4">
       <h3 className="mb-3 text-sm font-semibold text-text-primary">Transportation Details</h3>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {visible("pickup") && (
           <Input label="Pickup" value={value.pickup} onChange={(e) => set("pickup", e.target.value)} disabled={disabled} />
         )}
@@ -98,7 +98,7 @@ export function TransportationFields({ value, onChange, disabled, fieldConfig }:
 
       {value.cargoMode === "LCL_AIR" && (
         <div className="mt-3 flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {visible("packageCount") && (
               <Input
                 label="No. of Packages"
@@ -116,7 +116,7 @@ export function TransportationFields({ value, onChange, disabled, fieldConfig }:
               disabled={disabled}
             />
           </div>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <Input
               label="Length"
               type="number"
@@ -152,7 +152,7 @@ export function TransportationFields({ value, onChange, disabled, fieldConfig }:
 
       {value.cargoMode === "FCL" && (
         <>
-          <div className="mt-3 grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
             <Input
               label="Weight"
               type="number"
@@ -188,7 +188,7 @@ export function TransportationFields({ value, onChange, disabled, fieldConfig }:
             />
           </div>
           {value.isOdc && (
-            <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
               <Input
                 label="ODC Dimensions"
                 value={value.odcDimensions}

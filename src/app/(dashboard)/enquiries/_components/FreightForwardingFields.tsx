@@ -109,7 +109,7 @@ export function FreightForwardingFields({ value, onChange, disabled, ports, fiel
   return (
     <div className="rounded-lg border border-border-subtle p-4">
       <h3 className="mb-3 text-sm font-semibold text-text-primary">Freight Forwarding Details</h3>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {visible("incoterm") && (
           <Select
             label="Incoterm"
@@ -257,7 +257,7 @@ export function FreightForwardingFields({ value, onChange, disabled, ports, fiel
             />
           </div>
           {value.isOdc && (
-            <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
               <Input
                 label="ODC Dimensions"
                 value={value.odcDimensions}

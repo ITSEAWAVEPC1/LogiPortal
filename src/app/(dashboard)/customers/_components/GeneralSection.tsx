@@ -18,7 +18,7 @@ interface GeneralSectionProps {
 export function GeneralSection({ form, onChange, branches, canEdit }: GeneralSectionProps) {
   return (
     <fieldset disabled={!canEdit} className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Input label="Name" required value={form.name} onChange={(e) => onChange({ name: e.target.value })} />
         <Input label="Alias" value={form.alias} onChange={(e) => onChange({ alias: e.target.value })} />
       </div>
@@ -36,7 +36,7 @@ export function GeneralSection({ form, onChange, branches, canEdit }: GeneralSec
         <Checkbox label="Global" checked={form.isGlobal} onChange={(e) => onChange({ isGlobal: e.target.checked })} />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Input
           label="Contact person"
           value={form.contactPersonName}
@@ -54,7 +54,7 @@ export function GeneralSection({ form, onChange, branches, canEdit }: GeneralSec
         value={form.contactPersonEmail}
         onChange={(e) => onChange({ contactPersonEmail: e.target.value })}
       />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Input label="City" value={form.city} onChange={(e) => onChange({ city: e.target.value })} />
         <Input label="State" value={form.state} onChange={(e) => onChange({ state: e.target.value })} />
       </div>
@@ -68,7 +68,7 @@ export function GeneralSection({ form, onChange, branches, canEdit }: GeneralSec
 
       <div>
         <p className="mb-2 text-sm font-semibold text-text-primary">KYC</p>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           <Input
             label="GST number"
             value={form.gstNumber}

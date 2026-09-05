@@ -23,30 +23,10 @@ function dotClasses(status: Step["status"]) {
   }
 }
 
-export function StepTracker({ steps, orientation = "vertical" }: StepTrackerProps) {
-  if (orientation === "horizontal") {
-    return (
-      <ol className="flex w-full items-start">
-        {steps.map((step, i) => (
-          <li key={step.id} className="flex flex-1 items-center last:flex-none">
-            <div className="flex flex-col items-center gap-1">
-              <span className={cn("h-3 w-3 rounded-full", dotClasses(step.status))} />
-              <span className="max-w-[6rem] text-center text-xs text-text-secondary">{step.label}</span>
-            </div>
-            {i < steps.length - 1 && (
-              <span
-                className={cn(
-                  "mx-2 h-0.5 flex-1 self-start mt-1.5",
-                  step.status === "completed" ? "bg-brand-teal" : "bg-border-subtle",
-                )}
-              />
-            )}
-          </li>
-        ))}
-      </ol>
-    );
-  }
-
+// The horizontal orientation's fixed-width steps compress and collide on a
+// narrow viewport (labels wrap, dots overlap) rather than scrolling — below
+// `lg` it falls back to this same vertical layout instead.
+function VerticalSteps({ steps }: { steps: Step[] }) {
   return (
     <ol className="flex flex-col">
       {steps.map((step, i) => (
@@ -67,4 +47,36 @@ export function StepTracker({ steps, orientation = "vertical" }: StepTrackerProp
       ))}
     </ol>
   );
+}
+
+export function StepTracker({ steps, orientation = "vertical" }: StepTrackerProps) {
+  if (orientation === "horizontal") {
+    return (
+      <>
+        <ol className="hidden w-full items-start lg:flex">
+          {steps.map((step, i) => (
+            <li key={step.id} className="flex flex-1 items-center last:flex-none">
+              <div className="flex flex-col items-center gap-1">
+                <span className={cn("h-3 w-3 rounded-full", dotClasses(step.status))} />
+                <span className="max-w-[6rem] text-center text-xs text-text-secondary">{step.label}</span>
+              </div>
+              {i < steps.length - 1 && (
+                <span
+                  className={cn(
+                    "mx-2 h-0.5 flex-1 self-start mt-1.5",
+                    step.status === "completed" ? "bg-brand-teal" : "bg-border-subtle",
+                  )}
+                />
+              )}
+            </li>
+          ))}
+        </ol>
+        <div className="lg:hidden">
+          <VerticalSteps steps={steps} />
+        </div>
+      </>
+    );
+  }
+
+  return <VerticalSteps steps={steps} />;
 }

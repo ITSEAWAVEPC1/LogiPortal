@@ -117,7 +117,7 @@ function CustomerAccountInfoForm_({
   }
   return (
     <fieldset disabled={!canEdit} className="flex flex-col gap-3">
-      <div className="grid grid-cols-3 items-end gap-3">
+      <div className="grid grid-cols-1 items-end gap-3 lg:grid-cols-3">
         <Input
           label="Credit Limit"
           type="number"
@@ -133,7 +133,7 @@ function CustomerAccountInfoForm_({
         checked={value.includeWipShipmentInOverdue}
         onChange={(e) => patch({ includeWipShipmentInOverdue: e.target.checked })}
       />
-      <div className="grid grid-cols-2 items-end gap-3">
+      <div className="grid grid-cols-1 items-end gap-3 lg:grid-cols-2">
         <Checkbox label="Credit on hold" checked={value.isCreditOnHold} onChange={(e) => patch({ isCreditOnHold: e.target.checked })} />
         <Input
           label="Credit on hold remark"
@@ -142,7 +142,7 @@ function CustomerAccountInfoForm_({
           onChange={(e) => patch({ creditOnHoldRemark: e.target.value })}
         />
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Select
           label="Receivable Credit Period"
           placeholder="No. of Days"
@@ -185,7 +185,7 @@ function VendorAccountInfoForm_({
   }
   return (
     <fieldset disabled={!canEdit} className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 items-end gap-3">
+      <div className="grid grid-cols-1 items-end gap-3 lg:grid-cols-2">
         <Input
           label="Credit Limit"
           type="number"
@@ -195,7 +195,7 @@ function VendorAccountInfoForm_({
         />
         <Checkbox label="Unlimited" checked={value.isUnlimitedCredit} onChange={(e) => patch({ isUnlimitedCredit: e.target.checked })} />
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Select
           label="Payable Credit Period"
           placeholder="No. of Days"

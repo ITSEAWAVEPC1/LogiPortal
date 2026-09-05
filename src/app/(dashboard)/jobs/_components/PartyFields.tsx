@@ -44,7 +44,7 @@ export function PartyFields({ title, value, onChange, disabled }: PartyFieldsPro
   return (
     <div className="rounded-lg border border-border-subtle p-4">
       <h3 className="mb-3 text-sm font-semibold text-text-primary">{title}</h3>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Input label="Name" value={value.name} onChange={(e) => set("name", e.target.value)} disabled={disabled} />
         <Input
           label="Contact Person"

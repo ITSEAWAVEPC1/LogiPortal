@@ -141,7 +141,7 @@ function CustomerForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Input
           label="Customer name"
           required
@@ -162,7 +162,7 @@ function CustomerForm({
         <Checkbox label="Services" checked={form.isService} onChange={(e) => setForm({ ...form, isService: e.target.checked })} />
         <Checkbox label="Global" checked={form.isGlobal} onChange={(e) => setForm({ ...form, isGlobal: e.target.checked })} />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Input
           label="Contact person"
           value={form.contactPersonName}
@@ -180,7 +180,7 @@ function CustomerForm({
         value={form.contactPersonEmail}
         onChange={(e) => setForm({ ...form, contactPersonEmail: e.target.value })}
       />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Input label="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
         <Input label="State" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
       </div>
@@ -191,7 +191,7 @@ function CustomerForm({
         onChange={(e) => setForm({ ...form, branchId: e.target.value })}
         options={branches.map((b) => ({ value: b.id, label: b.name }))}
       />
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Input
           label="GST number"
           value={form.gstNumber}

@@ -80,7 +80,7 @@ function ColumnPickerBody({
 
   return (
     <div>
-      <div className="grid grid-cols-[1fr_auto_1fr] gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto_1fr]">
         <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-secondary">Available Columns</p>
           <select

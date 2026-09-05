@@ -54,7 +54,7 @@ export function ContainerDetailsEditor({ items, onChange, readOnly }: ContainerD
       </div>
       {items.length === 0 && <p className="text-xs text-text-tertiary">No containers added.</p>}
       {items.map((row, index) => (
-        <div key={index} className="grid grid-cols-2 gap-2 rounded-md border border-border-subtle p-2 sm:grid-cols-4">
+        <div key={index} className="grid grid-cols-2 gap-2 rounded-md border border-border-subtle p-2 lg:grid-cols-4">
           <Input
             label="Container No."
             value={row.containerNumber}
